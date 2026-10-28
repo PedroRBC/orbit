@@ -1,13 +1,13 @@
 import { connection } from "next/server";
 import Link from "next/link";
-import { connectionStatus } from "../../lib/extension";
+import { connectionStatus } from "../../../lib/extension";
 import { desc, eq } from "drizzle-orm";
 import { Radio, Youtube, Pause, Play, ArrowUpRight, Globe } from "lucide-react";
-import { getDatabase } from "../../db/index";
-import { browserSourceKinds, browserSourceLabels } from "../../collectors/types";
-import { collectorRuns, sources } from "../../db/schema";
-import { addNewsSource, addSource, enableBrowserSource, openBrowserLogin, toggleSource } from "../actions";
-import { ActionForm, CollectButton, SubmitButton } from "../components";
+import { getDatabase } from "../../../db/index";
+import { browserSourceKinds, browserSourceLabels, browserURLs } from "../../../collectors/types";
+import { collectorRuns, sources } from "../../../db/schema";
+import { addNewsSource, addSource, enableBrowserSource, toggleSource } from "../../actions";
+import { ActionForm, CollectButton, SubmitButton } from "../../components";
 
 export const metadata = { title: "Fontes" };
 export default async function SourcesPage() {
@@ -19,13 +19,13 @@ export default async function SourcesPage() {
   const channels = all.filter(source => source.kind === "youtube_rss");
   return <>
     <div className="page-heading"><div><h1>Suas fontes.</h1><p>O ponto de partida da sua curadoria.</p></div><CollectButton/></div>
-    <div className="notice"><div><strong>{extension.online ? "Seu navegador está conectado ao Orbit." : "Conecte seu navegador habitual."}</strong><p>Faça login normalmente no Helium e conecte a extensão local. Sem Chromium automatizado e sem exportar cookies.</p><Link href="/conectar">{extension.paired ? "Ver conexão do navegador" : "Instalar e conectar extensão"}</Link></div></div>
+    <div className="notice"><div><strong>{extension.online ? "Seu navegador está conectado ao Orbit." : "Conecte seu navegador habitual."}</strong><p>Faça login normalmente no Helium e conecte a extensão Orbit. Sem Chromium automatizado e sem exportar cookies.</p><Link href="/conectar">{extension.paired ? "Ver conexão do navegador" : "Instalar e conectar extensão"}</Link></div></div>
     <section className="browser-sources"><div className="section-heading"><div><h2>Seus feeds pessoais</h2><p>Sua sessão normal no navegador. O Orbit recebe apenas metadados pela extensão.</p></div><Globe size={22}/></div>
       <div className="browser-source-list">{(["youtube", "x", "instagram", "valete"] as const).map(platform => {
         const source = all.find(source => source.kind === browserSourceKinds[platform]);
         const last = source ? db.select().from(collectorRuns).where(eq(collectorRuns.sourceId, source.id)).orderBy(desc(collectorRuns.id)).get() : undefined;
         const name = browserSourceLabels[platform];
-        return <section className="panel browser-source" key={platform}><h3>{name}</h3><p>{platform === "youtube" ? "Vídeos recomendados na sua home, com os metadados visíveis." : platform === "x" ? "Posts da aba Para você, sem usar Seguindo como alternativa." : platform === "instagram" ? "Posts e legendas reconhecidas do feed, sem comentários ou stories." : "Feed geral pela API documentada. Somente permalinks reais observados."}</p><pre>npm run login -- {platform}</pre><p className="field-help">Este comando abre seu navegador padrão normal. Faça login no site e mantenha a extensão Orbit conectada.</p><ActionForm action={openBrowserLogin}><input type="hidden" name="platform" value={platform}/><SubmitButton className="button secondary" label={`Entrar em ${name} pelo navegador padrão`}>Entrar pelo meu navegador</SubmitButton></ActionForm><span className={`state-label ${source?.enabled ? "success-text" : "muted"}`}><span className="dot"/>{source?.enabled ? "Fonte ativa" : "Desativada"}</span>{last?.error && <p className="warning-text field-help">Última coleta: {last.error}</p>}
+        return <section className="panel browser-source" key={platform}><h3>{name}</h3><p>{platform === "youtube" ? "Vídeos recomendados na sua home, com os metadados visíveis." : platform === "x" ? "Posts da aba Para você, sem usar Seguindo como alternativa." : platform === "instagram" ? "Posts e legendas reconhecidas do feed, sem comentários ou stories." : "Feed geral pela API documentada. Somente permalinks reais observados."}</p><a className="button secondary" href={browserURLs[platform]} target="_blank" rel="noopener noreferrer">Abrir {name}<ArrowUpRight size={14} aria-hidden="true"/></a><p className="field-help">Abra no navegador onde a extensão Orbit está instalada e entre normalmente.</p><span className={`state-label ${source?.enabled ? "success-text" : "muted"}`}><span className="dot"/>{source?.enabled ? "Fonte ativa" : "Desativada"}</span>{last?.error && <p className="warning-text field-help">Última coleta: {last.error}</p>}
           {source?.enabled ? <ActionForm action={toggleSource}><input type="hidden" name="id" value={source.id}/><SubmitButton className="button secondary" label={`Pausar fonte ${name}`}>Pausar fonte</SubmitButton></ActionForm> : <ActionForm action={enableBrowserSource}><input type="hidden" name="platform" value={platform}/><SubmitButton className="button secondary" label={`Ativar fonte ${name}`}>Ativar fonte</SubmitButton></ActionForm>}
         </section>;
       })}</div><div className="inline-note">Somente leitura: nenhuma curtida, comentário, publicação ou follow. Verificação/CAPTCHA interrompe a fonte. Automatizar plataformas pode violar seus termos e causar restrição da conta.</div>

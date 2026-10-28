@@ -224,6 +224,13 @@ th:first-child, td:first-child { min-width: 150px; }
 .weight-form > input { width: 80px; }
 .weight-form > .form-message { grid-column: 1 / -1; margin-top: 0; }
 @media (max-width: 760px) { .briefing-panel { padding: 23px 20px; } .briefing-topics { grid-template-columns: 1fr; } .briefing-panel .section-heading { flex-direction: column; gap: 10px; } .weight-form { grid-template-columns: minmax(0, 1fr) 70px; gap: 12px; } .weight-form > .button { grid-column: 1 / -1; justify-self: start; } .weight-form > input { width: 70px; } nav > a { padding-inline: 3px; font-size: 10px; } }
+.login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.login-panel { width: min(100%, 420px); }
+.login-panel .brand { padding: 0; margin-bottom: 18px; }
+.login-panel h1 { font-size: 26px; margin-bottom: 8px; }
+.login-panel pre { white-space: pre-wrap; word-break: break-all; }
+.access-panel { margin-top: 24px; }
+.access-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
 @media (min-width: 1500px) { main { padding-top: 55px; } }
 @media (max-width: 1100px) {
   .sidebar { width: 194px; padding-inline: 12px; }

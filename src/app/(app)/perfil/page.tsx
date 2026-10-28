@@ -1,9 +1,9 @@
 import { connection } from "next/server";
-import { getDatabase } from "../../db/index";
-import { getProfile } from "../../lib/store";
-import { learnedWeights } from "../../lib/feedback";
-import { saveProfile, saveTopicWeight } from "../actions";
-import { ActionForm, SubmitButton } from "../components";
+import { getDatabase } from "../../../db/index";
+import { getProfile } from "../../../lib/store";
+import { learnedWeights } from "../../../lib/feedback";
+import { saveProfile, saveTopicWeight } from "../../actions";
+import { ActionForm, SubmitButton } from "../../components";
 
 export const metadata = { title: "Meu perfil" };
 export default async function ProfilePage() {

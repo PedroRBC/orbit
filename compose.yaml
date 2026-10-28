@@ -18,6 +18,8 @@ services:
     environment:
       TZ: ${TZ:-America/Sao_Paulo}
       COLLECTOR_TIMEZONE: ${COLLECTOR_TIMEZONE:-America/Sao_Paulo}
+      # Hosts aceitos além de localhost (atrás do seu proxy HTTPS), separados por vírgula.
+      ORBIT_ALLOWED_HOSTS: ${ORBIT_ALLOWED_HOSTS:-}
     volumes:
       # Sem caminho definido, usa volumes nomeados (teste local).
       - ${ORBIT_DATA_DIR:-orbit-data}:/data

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { proxy } from "../src/proxy";
-import { browserCommand } from "../src/lib/default-browser";
+import { POST as companion } from "../src/app/api/companion/[action]/route";
 import { eq } from "drizzle-orm";
 import { openDatabase } from "../src/db/index";
 import { collectorRuns, companionJobs, sources } from "../src/db/schema";
@@ -23,10 +23,20 @@ function setup() {
 const item = { platform: "youtube", externalId: "abcdefghijk", title: "Aula", text: "", author: "Canal", url: "https://www.youtube.com/watch?v=abcdefghijk", thumbnail: "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg", publishedAt: null, durationSeconds: null, evidence: "youtube_home" };
 
 describe("pareamento da extensão", () => {
-  it("abre o navegador habitual sem flags ou perfil de automação", () => {
-    expect(browserCommand("youtube", "linux")).toEqual({ command: "gio", args: ["open", "https://www.youtube.com/"] });
-    expect(browserCommand("x", "darwin")).toEqual({ command: "open", args: ["https://x.com/home"] });
-    expect(() => browserCommand("invalid" as "youtube")).toThrow();
+  it("pareia por HTTPS em qualquer host e por HTTP só em loopback", () => {
+    const { db } = setup();
+    expect(() => pairExtension(db, createPairingCode(db), extensionId, "http://192.168.0.10:30480")).toThrow(/HTTPS/);
+    expect(() => pairExtension(db, createPairingCode(db), extensionId, "http://orbit.example.com")).toThrow(/HTTPS/);
+    expect(pairExtension(db, createPairingCode(db), extensionId, "https://orbit.example.com").serverOrigin).toBe("https://orbit.example.com");
+  });
+  it("a rota da extensão recusa HTTP fora de loopback e Origin de página comum", async () => {
+    const post = (headers: Record<string, string>) => companion(new Request("http://0.0.0.0:3000/api/companion/pair", { method: "POST", headers: { "Content-Type": "application/json", "X-Orbit-Extension-Id": extensionId, ...headers }, body: JSON.stringify({ code: "x" }) }));
+    const insecure = await post({ Host: "orbit.example.com", Origin: origin });
+    expect(insecure.status).toBe(403);
+    expect((await insecure.json()).error).toMatch(/HTTPS/);
+    const page = await post({ Host: "orbit.example.com", "X-Forwarded-Proto": "https", Origin: "https://evil.example" });
+    expect(page.status).toBe(403);
+    expect((await page.json()).error).toMatch(/Origem/);
   });
   it("usa código único e revoga o token sem expor cookie", () => {
     const { db } = setup(); const code = createPairingCode(db);

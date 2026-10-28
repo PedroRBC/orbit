@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
-import type { OrbitDB } from "../db/index";
-import { briefings, rawItems, topics } from "../db/schema";
-import { aiStatus } from "../lib/config";
-import { getSetting } from "../lib/store";
-import { platformLabels } from "../collectors/types";
-import { TrackedLink } from "./components";
+import type { OrbitDB } from "../../db/index";
+import { briefings, rawItems, topics } from "../../db/schema";
+import { aiStatus } from "../../lib/config";
+import { getSetting } from "../../lib/store";
+import { platformLabels } from "../../collectors/types";
+import { TrackedLink } from "../components";
 
 export function DailyBriefing({ db }: { db: OrbitDB }) {
   const briefing = db.select().from(briefings).orderBy(desc(briefings.createdAt), desc(briefings.id)).get();

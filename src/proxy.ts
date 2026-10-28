@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sessionCookie } from "./lib/auth";
+import { hostAllowed } from "./lib/hosts";
 
+const publicPaths = ["/login", "/api/health"];
+// Checagem otimista (só presença do cookie): páginas, ações e rotas validam a sessão no banco.
 export function proxy(request: NextRequest) {
-  const host = request.headers.get("host") || "";
-  let hostname: string;
-  try { hostname = new URL(`http://${host}`).hostname; } catch { return new NextResponse("Host inválido", { status: 403 }); }
-  const local = ["localhost", "127.0.0.1", "[::1]"].includes(hostname);
-  const lan = process.env.ORBIT_HOST === "0.0.0.0" && /^(10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)$/.test(hostname);
-  if (!local && !lan) return new NextResponse("Acesso permitido somente no host local configurado.", { status: 403 });
-  if (request.nextUrl.pathname.startsWith("/api/extension/")) return new NextResponse("Use a ponte loopback dedicada.", { status: 403 });
+  const host = request.headers.get("host");
+  if (!hostAllowed(host)) return new NextResponse("Host não permitido. Inclua este endereço em ORBIT_ALLOWED_HOSTS.", { status: 403 });
+  const path = request.nextUrl.pathname;
+  if (path.startsWith("/api/extension/")) return new NextResponse("Use /api/companion.", { status: 403 });
+  // A extensão autentica por token e Origin chrome-extension://, validados na própria rota.
+  if (path.startsWith("/api/companion/")) return NextResponse.next();
   if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
     const origin = request.headers.get("origin");
     if (origin) {
@@ -16,6 +19,10 @@ export function proxy(request: NextRequest) {
     }
     if (request.headers.get("sec-fetch-site") === "cross-site") return new NextResponse("Origem não permitida", { status: 403 });
   }
-  return NextResponse.next();
+  if (publicPaths.includes(path) || request.cookies.get(sessionCookie)?.value) return NextResponse.next();
+  if (!["GET", "HEAD"].includes(request.method)) return NextResponse.json({ error: "Sessão necessária." }, { status: 401 });
+  // Base no Host já validado: request.url pode trazer o endereço interno (0.0.0.0, localhost).
+  const scheme = request.headers.get("x-forwarded-proto")?.split(",")[0].trim() === "https" ? "https" : "http";
+  return NextResponse.redirect(new URL(`/login?${new URLSearchParams({ next: path + request.nextUrl.search })}`, `${scheme}://${host}`));
 }
 export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"] };

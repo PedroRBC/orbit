@@ -30,7 +30,8 @@ export function createPairingCode(db: OrbitDB) {
 export function pairExtension(db: OrbitDB, code: string, extensionId: string, serverOrigin: string) {
   if (!extensionIdPattern.test(extensionId)) throw new ExtensionError("Extensão inválida.");
   const url = new URL(serverOrigin);
-  if (url.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || url.username || url.password) throw new ExtensionError("O pareamento exige um servidor local.");
+  const loopback = ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
+  if (!(url.protocol === "https:" || (url.protocol === "http:" && loopback)) || url.username || url.password) throw new ExtensionError("O pareamento exige HTTPS (ou HTTP só em localhost).");
   const result = db.transaction(() => {
     const stored = getSetting(db, pairingKey);
     const pairing = stored ? JSON.parse(stored) as { hash: string; expiresAt: number; attempts: number } : null;

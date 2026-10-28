@@ -5,15 +5,22 @@ import { captureRules, captureRuleIds } from "./policy";
 type Config = { server: string; token: string };
 type Job = { id: string; platform: BrowserPlatform; maxItems: number; expiresAt: number };
 let busy = false;
+// HTTPS em qualquer endereço do seu Orbit; HTTP só em localhost (desenvolvimento).
 function serverURL(value: string) {
   const url = new URL(value);
-  if (url.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(url.hostname) || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error("Use a URL local do Orbit, como http://127.0.0.1:3001.");
+  const local = ["127.0.0.1", "localhost"].includes(url.hostname);
+  if (!(url.protocol === "https:" || (url.protocol === "http:" && local)) || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error("Use o endereço HTTPS do Orbit, como https://orbit.seudominio.com (HTTP só em localhost).");
   return url.origin;
 }
+// Padrão de permissão sem porta: o Chrome aplica host_permissions a todas as portas do host.
+const permissionPattern = (server: string) => `${new URL(server).protocol}//${new URL(server).hostname}/*`;
+async function forgetServer(server: string | undefined) {
+  if (server?.startsWith("https:")) await chrome.permissions.remove({ origins: [permissionPattern(server)] }).catch(() => false);
+}
 async function send(config: Config, action: string, input: unknown) {
-  const response = await fetch(`${serverURL(config.server)}/api/extension/${action}`, { method: "POST", credentials: "omit", redirect: "error", headers: { "Content-Type": "application/json", "X-Orbit-Extension-Id": chrome.runtime.id, "X-Orbit-Extension-Version": chrome.runtime.getManifest().version, ...(config.token ? { Authorization: `Bearer ${config.token}` } : {}) }, body: JSON.stringify(input), signal: AbortSignal.timeout(10000) });
+  const response = await fetch(`${serverURL(config.server)}/api/companion/${action}`, { method: "POST", credentials: "omit", redirect: "error", headers: { "Content-Type": "application/json", "X-Orbit-Extension-Id": chrome.runtime.id, "X-Orbit-Extension-Version": chrome.runtime.getManifest().version, ...(config.token ? { Authorization: `Bearer ${config.token}` } : {}) }, body: JSON.stringify(input), signal: AbortSignal.timeout(10000) });
   const data = await response.json();
-  if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Falha na conexão local.");
+  if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Falha na conexão com o Orbit.");
   return data;
 }
 const touchedTabs = new Set<number>();
@@ -99,7 +106,7 @@ async function poll() {
     const data = await send(connection as Config, "poll", {});
     await chrome.storage.local.set({ status: "Conectada ao Orbit", lastSeen: Date.now() });
     if (data.job) await send(connection as Config, "result", { id: data.job.id, result: await capture(data.job as Job) });
-  } catch (error) { await chrome.storage.local.set({ status: error instanceof Error ? error.message : "Orbit indisponível. Abra o app local." }); }
+  } catch (error) { await chrome.storage.local.set({ status: error instanceof Error ? error.message : "Orbit indisponível. Confira o endereço e sua conexão." }); }
   finally { busy = false; }
 }
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
@@ -107,14 +114,17 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (message?.type === "pair") {
     (async () => {
       const server = serverURL(String(message.server || ""));
+      if (!await chrome.permissions.contains({ origins: [permissionPattern(server)] })) throw new Error("Permita o acesso ao endereço do Orbit para conectar.");
       const result = await send({ server, token: "" }, "pair", { code: String(message.code || "").trim() });
+      const { connection: previous } = await chrome.storage.local.get<{ connection?: Config }>("connection");
       await chrome.storage.local.set({ connection: { server, token: result.token }, status: "Conectada ao Orbit", lastSeen: Date.now() });
+      if (previous?.server !== server) await forgetServer(previous?.server);
       return { ok: true };
     })().then(result => { respond(result); void poll(); }, error => respond({ error: error instanceof Error ? error.message : "Não foi possível parear." }));
     return true;
   }
   if (message?.type === "disconnect") {
-    (async () => { const { connection } = await chrome.storage.local.get<{ connection?: Config }>("connection"); if (connection) await send(connection as Config, "disconnect", {}).catch(() => {}); await chrome.storage.local.remove(["connection", "lastSeen"]); await chrome.storage.local.set({ status: "Desconectada" }); return { ok: true }; })().then(respond);
+    (async () => { const { connection } = await chrome.storage.local.get<{ connection?: Config }>("connection"); if (connection) await send(connection as Config, "disconnect", {}).catch(() => {}); await forgetServer(connection?.server); await chrome.storage.local.remove(["connection", "lastSeen"]); await chrome.storage.local.set({ status: "Desconectada" }); return { ok: true }; })().then(respond);
     return true;
   }
   if (message?.type === "check") { void poll().then(() => respond({ ok: true })); return true; }

@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { Globe } from "lucide-react";
-import type { OrbitDB } from "../db/index";
-import { outsideItems } from "../lib/outside";
-import { getProfile } from "../lib/store";
-import { FeedbackControls, TrackedLink } from "./components";
+import type { OrbitDB } from "../../db/index";
+import { outsideItems } from "../../lib/outside";
+import { getProfile } from "../../lib/store";
+import { FeedbackControls, TrackedLink } from "../components";
 
 export function OutsideBubble({ db }: { db: OrbitDB }) {
   const rows = outsideItems(db);

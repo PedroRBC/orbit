@@ -1,13 +1,13 @@
 import { connection } from "next/server";
 import { desc, eq, isNull, sql } from "drizzle-orm";
 import { Activity, ShieldCheck } from "lucide-react";
-import { getDatabase } from "../../db/index";
-import { collectorRuns, processedItems, rawItems, sources } from "../../db/schema";
-import { connectionStatus } from "../../lib/extension";
-import { readSchedule } from "../../lib/scheduler";
-import { aiStatus } from "../../lib/config";
-import { dailyUsage, getSetting, workerOnline as isWorkerOnline } from "../../lib/store";
-import { CollectButton, WorkRefresh } from "../components";
+import { getDatabase } from "../../../db/index";
+import { collectorRuns, processedItems, rawItems, sources } from "../../../db/schema";
+import { connectionStatus } from "../../../lib/extension";
+import { readSchedule } from "../../../lib/scheduler";
+import { aiStatus } from "../../../lib/config";
+import { dailyUsage, getSetting, workerOnline as isWorkerOnline } from "../../../lib/store";
+import { CollectButton, WorkRefresh } from "../../components";
 
 export const metadata = { title: "Status" };
 const labels: Record<string, string> = {

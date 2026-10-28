@@ -2,7 +2,7 @@
 
 Um contêiner roda a interface, o worker e as migrações. O banco SQLite (modo WAL) fica num volume persistente; a configuração de IA fica num arquivo separado, fora da imagem e fora do Compose.
 
-> **Estado desta fase (F1):** o login ainda não existe; ele chega na F2. Até lá, deixe a porta acessível apenas na sua rede de confiança. Não publique na internet.
+O acesso é sempre protegido por senha e código TOTP. Fora de `localhost`, o login só acontece por HTTPS, através de um proxy reverso escolhido por você.
 
 ## Visão geral
 
@@ -16,7 +16,7 @@ Um contêiner roda a interface, o worker e as migrações. O banco SQLite (modo 
 | `/backups` | Cópias verificadas do banco |
 | Saúde | `GET /api/health`: 200 com interface e worker vivos; 503 se o worker parou de sinalizar. O `HEALTHCHECK` da imagem usa essa rota |
 
-A coleta pessoal (YouTube home, X, Instagram, Valete+) depende da extensão no navegador do seu computador. Com o computador desligado, o Orbit continua mostrando os dados já coletados e segue com RSS e IA. As fontes pessoais ficam com o aviso "navegador indisponível" até a extensão voltar.
+A coleta pessoal (YouTube home, X, Instagram, Valete+) depende da extensão no navegador do seu computador, que conversa com o Orbit pela API no mesmo endereço HTTPS da interface. Com o computador desligado, o Orbit continua mostrando os dados já coletados e segue com RSS e IA. As fontes pessoais ficam com o aviso "navegador indisponível" até a extensão voltar; o NAS nunca recebe cookies nem sessões das plataformas.
 
 ## Instalação no TrueNAS SCALE 25.10
 
@@ -65,6 +65,8 @@ services:
     environment:
       TZ: America/Sao_Paulo
       COLLECTOR_TIMEZONE: America/Sao_Paulo
+      # Endereços pelos quais você abre o Orbit, separados por vírgula.
+      ORBIT_ALLOWED_HOSTS: orbit.seudominio.com
     volumes:
       - /mnt/Configs/Apps/orbit/data:/data
       - /mnt/Configs/Apps/orbit/config:/config:ro
@@ -80,11 +82,50 @@ Faça isso direto na tela do TrueNAS, nunca em chat ou arquivo versionado.
 
 O TrueNAS chama o contêiner de `ix-orbit-orbit-1`. Os comandos abaixo usam esse nome.
 
-### 4. Conferir
+### 4. Primeiro acesso
+
+No Shell do TrueNAS:
+
+```bash
+docker exec -it ix-orbit-orbit-1 npm run auth -- setup
+```
+
+O comando pede uma senha (mínimo 12 caracteres, digitada sem eco), mostra a chave TOTP para cadastrar no app autenticador do celular, confere um código e exibe oito códigos de recuperação. Guarde esses códigos fora do NAS. Nada disso vai para os logs do contêiner. Rodar `setup` de novo troca senha e autenticador e encerra todas as sessões; `npm run auth -- logout-all` só encerra as sessões.
+
+### 5. Conferir
 
 - App em **Running** e saúde **healthy** na tela do app.
-- Página **Status** do Orbit: "Worker: Online".
-- Logs esperados: `Orbit: http://0.0.0.0:3000` e `Worker Orbit pronto`.
+- Logs esperados: `Orbit: http://0.0.0.0:3000` e `Worker Orbit pronto`. Enquanto o acesso não existir, aparece "Acesso ainda não configurado".
+- Pelo endereço HTTPS: tela **Entrar no Orbit**; depois do login, **Status** mostra "Worker: Online".
+
+## Acesso remoto e HTTPS
+
+O contêiner fala HTTP na porta publicada. Para usar no celular ou fora de casa, coloque um proxy reverso HTTPS na frente. Qualquer um serve se cumprir quatro requisitos:
+
+1. Termina TLS com certificado válido (necessário para login e para instalar o PWA).
+2. Repassa o `Host` original (não reescreve para o IP interno).
+3. Envia `X-Forwarded-Proto: https`.
+4. Esse host está em `ORBIT_ALLOWED_HOSTS`. Sem isso, o Orbit responde 403 a qualquer Host que não seja `localhost`.
+
+Exemplos:
+
+- **Caddy** (`reverse_proxy`): testado de ponta a ponta com a imagem, incluindo login, Server Actions, recusa de outra origem e pareamento da extensão.
+- **Tailscale Serve** (`tailscale serve --bg --https=8443 http://127.0.0.1:30480`, num nó com rede do host; acesso só pelo tailnet): preserva o `Host` e envia `X-Forwarded-Proto: https`, conforme o código do Tailscale. Não foi testado aqui.
+- **Nginx Proxy Manager** (proxy host para `http://<IP do NAS>:30480`): não foi testado aqui. Confira se o `Host` e o `X-Forwarded-Proto` chegam como descrito acima.
+
+Rede, DNS, certificados e roteador ficam por sua conta.
+
+- Abrir `http://<IP do NAS>:30480` direto mostra o login com o aviso "Abra o Orbit pelo endereço HTTPS" (e só se o IP estiver em `ORBIT_ALLOWED_HOSTS`). Senha e código nunca são aceitos por HTTP fora de localhost.
+- A porta 30480 não precisa estar aberta na internet: só o proxy precisa alcançá-la. Se o proxy roda no próprio NAS, você pode publicar só em loopback (`"127.0.0.1:30480:3000"`) quando o proxy usar rede do host.
+- Seguidos erros de senha/código bloqueiam novas tentativas por 15 minutos (5 por cliente, 20 no total). O proxy deve enviar `X-Forwarded-For` para o limite por cliente funcionar; o limite total vale sempre.
+
+## Extensão no computador
+
+1. Entre no Orbit pelo endereço HTTPS, abra **Conectar navegador** e baixe a extensão (`orbit-extensao-<versão>.zip`).
+2. No Helium: `chrome://extensions` → Modo de desenvolvedor → **Carregar sem compactação** → pasta `orbit-extensao`.
+3. Gere o código em **Conectar navegador**, informe o endereço HTTPS mostrado na tela no popup da extensão e permita o acesso quando o Helium pedir.
+
+Ao atualizar o Orbit, baixe a extensão de novo, substitua os arquivos da pasta e clique em **Recarregar**. O pareamento é preservado; a tela avisa quando a versão instalada está desatualizada.
 
 ## Variáveis
 
@@ -92,6 +133,7 @@ Vão em `environment:` no YAML, exceto as `AI_*`, que ficam em `orbit.env`.
 
 | Variável | Padrão | Uso |
 | --- | --- | --- |
+| `ORBIT_ALLOWED_HOSTS` | vazio | Hosts aceitos além de localhost (ex.: `orbit.seudominio.com,nas.tailnet.ts.net:8443`) |
 | `TZ` | `America/Sao_Paulo` no Compose | Horários na interface e nos logs |
 | `COLLECTOR_TIMEZONE` | `TZ` | Fuso da agenda |
 | `SCHEDULER_ENABLED` | `true` | Agenda automática |
@@ -175,6 +217,11 @@ Para usar IA no teste, copie um `orbit.env` para o volume `orbit-config`. Nunca 
 | Saúde `unhealthy` / Status "Sem sinal recente" | Worker parado ou esperando lease antigo (até 60 s) | Aguarde 1 min; se persistir, veja os logs e reinicie o app |
 | Status mostra erro de IA | `orbit.env` vazio, inválido ou ilegível | Confira dono e permissão 600; o diagnóstico nunca mostra a chave |
 | Porta 30480 em uso | Outro app na mesma porta | Troque o lado esquerdo de `ports:` |
+| "Host não permitido" (403) | Endereço fora de `ORBIT_ALLOWED_HOSTS` ou proxy reescrevendo o Host | Inclua o host exato (com porta, se não for 443) e confira se o proxy preserva o `Host` |
+| Login diz "Abra o Orbit pelo endereço HTTPS" | Acesso por HTTP ou proxy sem `X-Forwarded-Proto: https` | Use o endereço HTTPS; ajuste o proxy |
+| "Acesso ainda não configurado" | Primeiro uso | Rode o `setup` do passo 4 |
+| Perdeu o autenticador | — | Entre com um código de recuperação ou rode o `setup` de novo pelo Shell do TrueNAS |
+| Extensão "Sem permissão para acessar o endereço" | Permissão negada no Helium | Conecte de novo e permita o acesso ao host do Orbit |
 
 Comandos úteis:
 

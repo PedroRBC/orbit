@@ -2,15 +2,15 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { and, desc, eq, gte, ne, sql } from "drizzle-orm";
 import { ArrowRight, Check, Play, SlidersHorizontal, Sparkles, Radio, MessageSquare } from "lucide-react";
-import { getDatabase } from "../db/index";
-import { collectorRuns, feedback, processedItems, rawItems, sources } from "../db/schema";
-import { platformLabels } from "../collectors/types";
-import { adjustedScore, learnedWeights, rankingExpression } from "../lib/feedback";
+import { getDatabase } from "../../db/index";
+import { collectorRuns, feedback, processedItems, rawItems, sources } from "../../db/schema";
+import { platformLabels } from "../../collectors/types";
+import { adjustedScore, learnedWeights, rankingExpression } from "../../lib/feedback";
 import { OutsideBubble } from "./outside";
 import { DailyBriefing } from "./briefing";
-import { activeItemCondition, getProfile } from "../lib/store";
-import { aiStatus } from "../lib/config";
-import { CollectButton, FeedbackControls, TrackedLink, WorkRefresh, ExternalMark } from "./components";
+import { activeItemCondition, getProfile } from "../../lib/store";
+import { aiStatus } from "../../lib/config";
+import { CollectButton, FeedbackControls, TrackedLink, WorkRefresh, ExternalMark } from "../components";
 
 export default async function Home({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await connection();
