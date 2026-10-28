@@ -1,7 +1,7 @@
 # Orbit em um contêiner: interface, worker e migrações. Veja docs/deploy.md.
 services:
   orbit:
-    image: ${ORBIT_IMAGE:-ghcr.io/pedrorbc/orbit:0.2.0-rc.2}
+    image: ${ORBIT_IMAGE:-ghcr.io/pedrorbc/orbit:0.2.0}
     build: .
     init: true
     restart: unless-stopped

@@ -1,6 +1,12 @@
 # Validação do Orbit self-hosted
 
-Data: 28/10/2026. [PR #2](https://github.com/PedroRBC/orbit/pull/2), sem merge.
+Data: 28/10/2026. [PR #2](https://github.com/PedroRBC/orbit/pull/2).
+
+## Promoção para a versão oficial
+
+Após validar o candidato, o usuário autorizou integrar na `main` e publicar `0.2.0`, `latest` e `sha-<commit curto>`. As referências padrão do Compose e do guia passam a `0.2.0`. A [publicação da main](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml?query=branch%3Amain) verifica as três tags, o digest e a privacidade do pacote antes de a entrega ser declarada publicada.
+
+Os resultados e o digest da seção de publicação abaixo pertencem ao candidato anterior `rc.2`, não à versão oficial. NAS e celular reais continuam pendentes do usuário.
 
 ## Escopo e ambiente
 

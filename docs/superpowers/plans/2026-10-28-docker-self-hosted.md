@@ -80,5 +80,5 @@
 - F1–F3 executadas e verificadas localmente: 123 testes unitários, typecheck, build e 14 e2e de produção. Testes de imagem, backup/WAL, recriação, migrações, queda do worker, sessão e proxy HTTPS registrados no PR.
 - Revisão independente encontrou vazamento RSC com cookie inventado, redirect com tab, bloqueio global, corpo sem limite, reuso do TOTP de setup e códigos de recuperação curtos. Corrigidos em `4ce91eff`; regressões incluídas.
 - CI do PR aprovado em https://github.com/PedroRBC/orbit/actions/runs/40694846180.
-- Instalação real no TrueNAS, proxy/domínio e Android/iPhone continuam pendentes do usuário; não alterar o NAS nem fazer merge.
+- Instalação real no TrueNAS, proxy/domínio e Android/iPhone continuam pendentes do usuário; não alterar o NAS. Depois da publicação do candidato, o usuário autorizou integrar na main e publicar a versão oficial `0.2.0` com `latest` e SHA.
 - F4 publicada e verificada: https://github.com/PedroRBC/orbit/actions/runs/40696551059. Pacote privado, tags `0.2.0-rc.2` e `sha-f56c736`, ambas em `sha256:247766a60bf7b000e1fae051680cdc3c69ea449190ce24e38d9ed05fcb332c0c`. Verificação pela API e registry dentro do workflow. Evidências detalhadas em docs/validation-self-hosted.md. O pacote privado exige credencial de leitura no TrueNAS, fornecida pelo usuário diretamente na interface do NAS.
