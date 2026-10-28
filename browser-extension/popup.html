@@ -1,12 +1,12 @@
 <!doctype html>
 <html lang="pt-BR">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orbit local</title><link rel="stylesheet" href="popup.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orbit</title><link rel="stylesheet" href="popup.css"></head>
 <body>
   <h1>Orbit</h1>
-  <p>Use o login normal deste navegador. Cookies e senhas nunca são enviados ao app.</p>
+  <p>Use o login normal deste navegador. Cookies e senhas das plataformas nunca são enviados ao Orbit.</p>
   <form id="pair">
-    <label for="server">Endereço da ponte local</label>
-    <input id="server" type="url" value="http://127.0.0.1:3001" required autocomplete="off">
+    <label for="server">Endereço do Orbit</label>
+    <input id="server" type="url" placeholder="https://orbit.seudominio.com" required autocomplete="off">
     <label for="code">Código de pareamento</label>
     <input id="code" type="password" required autocomplete="off" maxlength="200" placeholder="Gere em Orbit → Conectar navegador">
     <button type="submit">Conectar ao Orbit</button>

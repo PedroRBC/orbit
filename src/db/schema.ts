@@ -120,3 +120,10 @@ export const aiCalls = sqliteTable("ai_calls", {
   status: text().notNull(),
   createdAt: integer().notNull(),
 });
+
+// Sessões de login: só o SHA-256 do token fica no banco.
+export const sessions = sqliteTable("sessions", {
+  id: text().primaryKey(),
+  createdAt: integer().notNull(),
+  expiresAt: integer().notNull(),
+});

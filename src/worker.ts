@@ -59,7 +59,7 @@ try {
           try {
             db.transaction(() => {
               assertActive();
-              const message = "Execução interrompida. Confira a configuração do .env e tente novamente.";
+              const message = "Execução interrompida. Confira a configuração de IA no servidor (.env ou orbit.env) e tente novamente.";
               setSetting(db, "ai_notice", message);
               db.update(collectorRuns).set({ status: "error", error: message, finishedAt: Date.now() }).where(eq(collectorRuns.id, run.id)).run();
             }, { behavior: "immediate" });

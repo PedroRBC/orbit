@@ -1,0 +1,31 @@
+# Orbit em um contêiner: interface, worker e migrações. Veja docs/deploy.md.
+services:
+  orbit:
+    image: ${ORBIT_IMAGE:-ghcr.io/pedrorbc/orbit:0.2.0}
+    build: .
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    user: "${ORBIT_UID:-568}:${ORBIT_GID:-568}"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache:uid=${ORBIT_UID:-568},gid=${ORBIT_GID:-568}
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    ports:
+      - "${ORBIT_PORT:-30480}:3000"
+    environment:
+      TZ: ${TZ:-America/Sao_Paulo}
+      COLLECTOR_TIMEZONE: ${COLLECTOR_TIMEZONE:-America/Sao_Paulo}
+      # Hosts aceitos além de localhost (atrás do seu proxy HTTPS), separados por vírgula.
+      ORBIT_ALLOWED_HOSTS: ${ORBIT_ALLOWED_HOSTS:-}
+    volumes:
+      # Sem caminho definido, usa volumes nomeados (teste local).
+      - ${ORBIT_DATA_DIR:-orbit-data}:/data
+      - ${ORBIT_CONFIG_DIR:-orbit-config}:/config:ro
+      - ${ORBIT_BACKUP_DIR:-orbit-backups}:/backups
+volumes:
+  orbit-data:
+  orbit-config:
+  orbit-backups:

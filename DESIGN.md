@@ -86,3 +86,7 @@ Labels ligados a inputs, navegação com aria-current, skip link e foco visível
 ## Do's and Don'ts
 
 Nenhuma imagem gerada, stock ou raster local de decoração. Thumbnails são URLs oficiais derivadas do ID do vídeo e carregadas pelo navegador, sem proxy/download no servidor.
+
+## Ícones do app (PWA)
+
+`public/icons/icon-192.png`, `icon-512.png`, `maskable-512.png`, `src/app/apple-icon.png` e `src/app/icon.svg` são gerados por `scripts/pwa-icons.ts`. Procedência: glifo Lucide `Orbit` (ISC), o mesmo da barra lateral, traço `--accent` (#c5b7f7) sobre `--ground` (#101521). Não são imagens geradas por IA nem decoração. O maskable mantém o glifo dentro do círculo seguro de 80%.

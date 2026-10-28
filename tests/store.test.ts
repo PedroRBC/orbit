@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { openDatabase } from "../src/db/index";
 import { sources, sourceItems, rawItems } from "../src/db/schema";
-import { enqueueCollection, claimRun, saveRawItems, reserveUsage, settleUsage, dailyUsage, activeItemCondition } from "../src/lib/store";
+import { enqueueCollection, claimRun, saveRawItems, reserveUsage, settleUsage, dailyUsage, activeItemCondition, acquireLease, workerOnline } from "../src/lib/store";
 
 const databases: ReturnType<typeof openDatabase>[] = [];
 function database() { const db = openDatabase(":memory:"); databases.push(db); return db; }
@@ -64,5 +64,15 @@ describe("orçamento conservador", () => {
     reserveUsage(db, 300, 0.2, 1000, 0.25);
     expect(() => reserveUsage(db, 50, 0.1, 1000, 0.25)).toThrow();
     expect(dailyUsage(db)).toMatchObject({ tokens: 300, cost: 0.2, reserved: 1 });
+  });
+});
+
+describe("saúde do worker", () => {
+  it("considera online só com heartbeat dos últimos 30 segundos", () => {
+    const db = database();
+    expect(workerOnline(db, 1_000_000)).toBe(false);
+    acquireLease(db, "worker", 1_000_000);
+    expect(workerOnline(db, 1_029_999)).toBe(true);
+    expect(workerOnline(db, 1_030_000)).toBe(false);
   });
 });

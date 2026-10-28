@@ -4,6 +4,15 @@ Curador pessoal de conteúdo, local e em português. **Cinco fases implementadas
 
 Não confunda o que seus feeds mostram com uma visão completa do mundo. O Orbit indica fontes e limites da análise.
 
+## Docker, TrueNAS e celular
+
+O Orbit roda como um serviço em contêiner: interface, worker e migrações juntos, banco SQLite persistente e IA configurada fora da imagem. Pelo endereço HTTPS, ele pode ser instalado no celular como app (PWA). Instalação, volumes, acesso remoto, login, extensão, PWA no Android/iPhone, backup, atualização e diagnóstico estão em [docs/deploy.md](docs/deploy.md).
+
+- [PR de implantação #2](https://github.com/PedroRBC/orbit/pull/2).
+- [Pacote privado no GHCR](https://github.com/users/PedroRBC/packages/container/package/orbit): versão oficial `ghcr.io/pedrorbc/orbit:0.2.0`, também disponível como `:latest` e `:sha-<commit curto>`.
+- [Publicações da main](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml?query=branch%3Amain): cada execução confere privacidade, tags e digest; consulte a última publicação aprovada antes de instalar ou atualizar.
+- [Registro de validação](docs/validation-self-hosted.md): testes executados e pendências no NAS/celular, incluindo a [publicação anterior do candidato](https://github.com/PedroRBC/orbit/actions/runs/40696551059).
+
 ## Rodar
 
 Requisitos: **Node.js 22.12+** (testado com 24), npm e, se não houver binário SQLite pronto, ferramentas de compilação nativas.
@@ -14,13 +23,13 @@ cp .env.example .env
 npm run dev
 ```
 
-Abra **http://127.0.0.1:3000**. Após a instalação/configuração, `npm run dev` é o único comando necessário: aplica migrações, inicia interface e worker. Ctrl+C encerra ambos. Se a porta estiver ocupada, o comando falha sem deixar um segundo worker rodando.
+Na primeira vez, crie o acesso: `npm run auth -- setup` pede uma senha (mínimo 12 caracteres), mostra a chave para seu app autenticador (TOTP) e oito códigos de recuperação. Depois abra **http://127.0.0.1:3000** e entre com a senha e o código de 6 dígitos. `npm run dev` aplica migrações e inicia interface e worker; Ctrl+C encerra ambos. Se a porta estiver ocupada, o comando falha sem deixar um segundo worker rodando.
 
 npm 12 pode bloquear scripts nativos por padrão. O `allowScripts` no package.json autoriza somente as versões instaladas de better-sqlite3 e esbuild. Se atualizar essas versões, revise a lista de scripts antes de aprovar as novas.
 
 1. Em **Configurações**, informe interesses e assuntos a evitar.
 2. Em **Fontes**, cadastre canais com ID `UC…` ou URL `https://www.youtube.com/channel/UC…`.
-3. Configure a IA no `.env`. URL, chave, modelos e limites são relidos automaticamente; reinicie somente para aplicar atualização de código ou alterar portas/banco.
+3. Configure a IA no `.env` (no Docker, em `/config/orbit.env`). URL, chave, modelos e limites são relidos automaticamente; reinicie somente para aplicar atualização de código ou alterar portas/banco.
 4. Clique em **Atualizar fontes**. Acompanhe a fila em **Status**.
 
 Sem IA, o app abre e coleta metadados, mas não inventa notas ou resumos. Sem canais/preferências, mostra configuração inicial, não conteúdo de demonstração.
@@ -29,24 +38,24 @@ Sem IA, o app abre e coleta metadados, mas não inventa notas ou resumos. Sem ca
 
 O RSS exige o identificador de canal, não o nome nem o link `@handle`. No YouTube, procure **Sobre o canal → Compartilhar canal → Copiar ID do canal**. Os nomes das opções podem variar. URLs `/channel/UC…` também servem. Nesta fase não há importação de inscrições nem resolução automática de handles.
 
-## Login pelo seu navegador habitual
+## Login nas plataformas pelo seu navegador
 
-O login **não abre mais um Chromium automatizado**. O comando `npm run login -- youtube` abre o manipulador HTTPS normal do sistema, que nesta máquina é o Helium. Você também pode usar **Entrar pelo meu navegador** em Fontes ou os links no popup da extensão.
+O Orbit não abre navegador automatizado nem guarda sessões das plataformas. Você entra no YouTube, X, Instagram e Valete+ pelo Helium do seu computador, e a extensão Orbit lê os feeds ali e envia só metadados ao seu Orbit, onde quer que ele rode (computador, NAS ou servidor).
 
-### Instalação única da extensão local
+### Instalação única da extensão
 
-1. Inicie o Orbit com `npm run dev` e abra **http://127.0.0.1:3000/conectar**.
-2. No Helium, abra `chrome://extensions`, ative **Modo de desenvolvedor** e escolha **Carregar sem compactação**.
-3. Selecione a pasta `browser-extension/dist` deste projeto. Ela é gerada automaticamente ao iniciar/buildar o app; isoladamente, use `npm run build:extension`.
-4. No Orbit, gere um **código temporário**. Abra o popup **Orbit — coletor local**, informe o endereço da ponte mostrado na tela (padrão `http://127.0.0.1:3001`) e cole o código. Ele expira em 10 minutos e só pode ser usado uma vez.
-5. Faça login normalmente nos sites, **no mesmo perfil do navegador em que instalou a extensão**. Não precisa fechar as janelas. Mantenha o Helium aberto.
-6. Ative as fontes em **Fontes** e clique em **Atualizar fontes** no Orbit.
+1. Abra **Conectar navegador** (`/conectar`) no Orbit e clique em **Baixe a extensão**. Descompacte o arquivo.
+2. No Helium, abra `chrome://extensions`, ative **Modo de desenvolvedor**, escolha **Carregar sem compactação** e selecione a pasta `orbit-extensao`.
+3. No Orbit, gere um **código temporário**. No popup **Orbit — coletor**, informe o endereço mostrado na tela (o HTTPS do seu Orbit, ou `http://127.0.0.1:3000` em desenvolvimento) e cole o código. Ele expira em 10 minutos e só pode ser usado uma vez.
+4. O Helium pede acesso ao endereço do Orbit: permita. A extensão só recebe acesso a esse host; ao desconectar, a permissão é devolvida.
+5. Entre normalmente nos sites, **no mesmo perfil do navegador em que instalou a extensão**, e mantenha o Helium aberto.
+6. Ative as fontes em **Fontes** e clique em **Atualizar fontes**.
 
-A extensão consulta somente pedidos locais a cada 30 segundos; esse alarme não agenda coletas nas plataformas por conta própria. O worker continua responsável por solicitar cada coleta. Sem conexão, aparece um aviso em vez de abrir outro navegador ou copiar cookies. Você pode revogar a conexão no Orbit a qualquer momento.
+A extensão consulta o Orbit a cada 30 segundos; esse alarme não agenda coletas nas plataformas. O worker solicita cada coleta. Com o navegador fechado ou o computador desligado, o Orbit continua mostrando o que já foi coletado e segue com RSS e IA; as fontes pessoais aparecem como "navegador indisponível" até a extensão voltar. Você pode revogar a conexão no Orbit a qualquer momento.
 
-Nas configurações da extensão no Helium, mantenha autorizado o acesso aos sites que deseja coletar. Se o acesso estiver restrito, o Orbit informa a necessidade de permissão. As permissões são limitadas a YouTube, X, Instagram, Valete+ e localhost; não há `cookies`, `debugger`, `tabs`, `webRequest` nem `<all_urls>` nas permissões do manifesto. Regras de rede se aplicam apenas às abas criadas para coleta, não às abas em que você navega ou faz login.
+Nas configurações da extensão no Helium, mantenha autorizado o acesso aos sites que deseja coletar. As permissões fixas são YouTube, X, Instagram, Valete+ e localhost; o endereço HTTPS do Orbit é uma permissão opcional concedida por você. Não há `cookies`, `debugger`, `tabs`, `webRequest` nem `<all_urls>`. Regras de rede se aplicam apenas às abas criadas para coleta.
 
-A ponte escuta em uma porta própria, **somente em 127.0.0.1**, mesmo se a interface estiver acessível pela LAN. Por padrão usa a porta do app + 1 (3001); `ORBIT_EXTENSION_PORT` pode alterá-la. A porta da interface recusa as rotas da ponte, inclusive com Host forjado. O token da conexão local fica em storage.local restrito da extensão e somente seu hash no SQLite. É separado de qualquer sessão de plataforma. Cookies, senhas, tokens de login e localStorage das plataformas nunca são exportados. O código de pareamento não deve ser compartilhado em chat ou logs.
+**Conexão com o Orbit:** a extensão usa `/api/companion` no mesmo endereço da interface. Fora de localhost, exige HTTPS e recusa redirecionamentos. Cada pedido leva o token da extensão (só o hash fica no SQLite), o ID da extensão e a origem `chrome-extension://`, sem cookies. A rota só aceita os quatro pedidos (parear, consultar, entregar resultado, desconectar), com payload validado e jobs presos ao lease do worker; nunca aceita URLs ou plataformas arbitrárias nem credenciais. O caminho antigo `/api/extension` é sempre recusado. Cookies, senhas e tokens das plataformas nunca são exportados. Não compartilhe o código de pareamento.
 
 ### Como a coleta funciona
 
@@ -62,12 +71,7 @@ Um vídeo encontrado no RSS e na home continua único e vinculado às duas fonte
 
 ## Conectar Instagram e Valete+
 
-```bash
-npm run login -- instagram
-npm run login -- valete
-```
-
-Os comandos abrem seu navegador padrão normal. Faça login no perfil em que instalou a extensão, mantenha o navegador aberto e solicite a atualização pelo Orbit. Não existe mais perfil separado obrigatório nem exportação de cookie.
+Em **Fontes**, use **Abrir Instagram** e **Abrir Valete+** (ou os links do popup) no navegador onde a extensão está instalada. Faça login normalmente, mantenha o navegador aberto e solicite a atualização pelo Orbit. Não existe perfil separado nem exportação de cookie.
 
 **Instagram:** lê posts/reels reconhecidos no feed. A legenda só é guardada quando há um seletor identificável de legenda; comentários, stories e mensagens não entram na coleta. Se o layout não expuser a legenda por esses seletores, o registro indica apenas os metadados disponíveis. Consultas POST ficam bloqueadas, exceto o endpoint de leitura `/api/v1/feed/timeline/`; mudanças para consultas GraphQL diferentes podem exigir revisão explícita da allowlist. Não há fallback liberando todas as requisições.
 
@@ -183,11 +187,11 @@ AI_DAILY_USD_LIMIT=
 
 ## Dados e segurança
 
-SQLite em `data/orbit.db`, com WAL e migrações versionadas. Não há login ou multiusuário. O processo escuta **127.0.0.1 por padrão**. Não exponha o app à internet.
+SQLite com WAL e migrações versionadas (`data/orbit.db`; `/data` no Docker). Usuário único, sempre com login: senha (scrypt) e código TOTP, ou um código de recuperação. A sessão é um cookie `__Host-` HttpOnly, Secure e SameSite=Strict, válido por 30 dias, com só o hash no banco. **Configurações → Acesso** permite sair deste dispositivo ou de todos; `npm run auth -- setup` troca senha e autenticador e encerra todas as sessões; `npm run auth -- logout-all` só encerra as sessões. Cinco erros seguidos bloqueiam aquele cliente (último endereço do `X-Forwarded-For`) por 15 minutos; não há bloqueio global, e `npm run auth -- unlock` limpa os bloqueios.
 
-Para ativar acesso pelo celular na mesma rede, altere explicitamente `ORBIT_HOST=0.0.0.0` no `.env`, reinicie e acesse o IP privado do computador na porta configurada. **Isso permite acesso às preferências, fontes e controles por qualquer pessoa nessa rede.** Use apenas rede confiável e regras de firewall. Nomes DNS arbitrários são recusados para mitigar DNS rebinding.
+Fora de localhost, o login só acontece por HTTPS: publique o Orbit atrás de um proxy reverso (Tailscale Serve, Nginx Proxy Manager, Caddy etc.) que preserve o `Host` e envie `X-Forwarded-Proto: https`. Liste o endereço em `ORBIT_ALLOWED_HOSTS`; outros Hosts recebem 403, o que impede DNS rebinding. Requisições de mutação de outra origem são recusadas, e cada Server Action valida a sessão por conta própria.
 
-Não apague `data/` para atualizar o app. Para backup, pare o Orbit e copie a pasta `data/` inteira, incluindo arquivos WAL se existirem. `.env`, banco e perfis de navegador estão ignorados no Git.
+Backup consistente com o app ligado: `npm run db:backup` (veja [docs/deploy.md](docs/deploy.md) para Docker, restauração e rollback). `.env`, banco e perfis de navegador estão ignorados no Git e fora da imagem Docker.
 
 ## Limitações atuais
 
@@ -212,13 +216,15 @@ E2E_PRODUCTION=1 npm run test:e2e
 
 Os testes não usam API paga: exercitam SDKs contra servidor HTTP local e SQLite real isolado. O e2e inicia app e worker com banco em `test-results/`. A coleta de um canal real depende de rede/YouTube e não é garantida por fixtures.
 
-Após `npm run build`, **`npm start`** inicia a versão de produção e o worker no mesmo comando.
+Após `npm run build`, **`npm start`** inicia a versão de produção e o worker no mesmo comando. No GitHub, o workflow `CI` roda essa mesma bateria em cada PR; a publicação da imagem está descrita em [docs/deploy.md](docs/deploy.md#imagem-no-ghcr).
 
 ## Estado da entrega
 
-As cinco fases foram implementadas, testadas incrementalmente e autorizadas em sequência. O novo login por extensão foi uma alteração aprovada para evitar o browser automatizado recusado pelo Google. Falta sua validação final com a extensão instalada no perfil real do Helium, seus canais/RSS/interesses e o endpoint de IA escolhido. Nenhum teste usou API paga.
+As cinco fases do app foram implementadas e testadas. Depois, o Orbit virou serviço próprio para Docker/TrueNAS (contêiner com dados persistentes, login com senha + TOTP, extensão conectada pela API e PWA instalável), entregue em fases no PR de implantação. Nenhum teste usou API paga nem o banco real.
 
-Não há seed de notícias fictícias em produção. Dados sintéticos aparecem somente em bancos isolados de teste. Resultados assistidos reais anteriores estão identificados no histórico; não são prova de que a extensão já foi instalada no seu navegador.
+Testado automaticamente: unitários, typecheck, build, e2e de produção (inclui extensão real pareada pela API), imagem Docker (saúde, worker, recriação sem perda, migração de banco antigo, reinício após queda, volume sem permissão) e fluxo completo atrás de um proxy HTTPS (Caddy). Pendente de validação sua: instalação no TrueNAS, seu proxy/domínio ou Tailscale, a extensão no seu Helium com permissão do endereço HTTPS, e a instalação do PWA no seu Android/iPhone.
+
+Não há seed de notícias fictícias em produção. Dados sintéticos aparecem somente em bancos isolados de teste.
 
 ## Aviso sobre automação
 

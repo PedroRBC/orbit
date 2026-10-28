@@ -1,2 +1,2 @@
-// A ponte não é publicada na porta da interface, que pode estar exposta à LAN.
-export function POST() { return Response.json({ error: "Use a ponte loopback dedicada." }, { status: 403 }); }
+// Caminho antigo da ponte loopback: sempre recusado. A extensão usa /api/companion.
+export function POST() { return Response.json({ error: "Use /api/companion." }, { status: 403 }); }

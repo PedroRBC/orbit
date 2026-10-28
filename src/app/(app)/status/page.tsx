@@ -1,21 +1,19 @@
 import { connection } from "next/server";
+import { requireSession } from "../../../lib/session";
 import { desc, eq, isNull, sql } from "drizzle-orm";
 import { Activity, ShieldCheck } from "lucide-react";
-import { getDatabase } from "../../db/index";
-import { collectorRuns, processedItems, rawItems, sources } from "../../db/schema";
-import { connectionStatus } from "../../lib/extension";
-import { readSchedule } from "../../lib/scheduler";
-import { aiStatus } from "../../lib/config";
-import { dailyUsage, getSetting } from "../../lib/store";
-import { CollectButton, WorkRefresh } from "../components";
+import { getDatabase } from "../../../db/index";
+import { collectorRuns, processedItems, rawItems, sources } from "../../../db/schema";
+import { connectionStatus } from "../../../lib/extension";
+import { readSchedule } from "../../../lib/scheduler";
+import { aiStatus } from "../../../lib/config";
+import { dailyUsage, getSetting, workerOnline as isWorkerOnline } from "../../../lib/store";
+import { CollectButton, WorkRefresh } from "../../components";
+import { runLabels as labels } from "../../../lib/run-labels";
 
 export const metadata = { title: "Status" };
-const labels: Record<string, string> = {
-  queued: "Na fila", running: "Em andamento", completed: "Concluída", partial: "Parcial", error: "Falhou",
-  login_required: "Login necessário", verification_required: "Verificação necessária", layout_changed: "Revisar fonte/layout",
-  profile_in_use: "Perfil ocupado", browser_unavailable: "Navegador indisponível", rate_limited: "Aguardando Retry-After", unsafe_source: "RSS bloqueado por segurança", source_timeout: "Consulta excedeu o prazo", source_http_error: "Falha HTTP/rede", navigation_failed: "Falha ao abrir feed", script_injection_failed: "Leitor sem acesso à página", capture_timeout: "Prazo de captura excedido", user_interrupted: "Interrompida ao assumir a aba",
-};
 export default async function StatusPage() {
+  await requireSession();
   await connection();
   const db = getDatabase(), ai = aiStatus(), extension = connectionStatus(db), usage = dailyUsage(db), schedule = readSchedule(db);
   const next = getSetting(db, "scheduler_next");
@@ -24,7 +22,7 @@ export default async function StatusPage() {
   const budgetExhausted = tokensRemaining === 0 || (ai.costLimit !== null && dollarsRemaining === 0);
   const unknownCost = ai.costLimit !== null && usage.calls > 0 && usage.cost === null;
   const runs = db.select({ run: collectorRuns, source: sources.name }).from(collectorRuns).leftJoin(sources, eq(sources.id, collectorRuns.sourceId)).orderBy(desc(collectorRuns.id)).limit(30).all();
-  const workerOnline = Number(getSetting(db, "worker_heartbeat") || 0) > Date.now() - 30_000;
+  const workerOnline = isWorkerOnline(db);
   const pending = db.select({ count: sql<number>`count(*)` }).from(rawItems).leftJoin(processedItems, eq(rawItems.id, processedItems.rawId)).where(isNull(processedItems.rawId)).get()?.count ?? 0;
   const active = runs.some(({ run }) => ["queued", "running"].includes(run.status));
   const storedNotice = getSetting(db, "ai_notice"), storedBriefingNotice = getSetting(db, "briefing_notice");
@@ -33,7 +31,7 @@ export default async function StatusPage() {
   return <>
     <WorkRefresh active={active || !workerOnline}/>
     <div className="page-heading"><div><h1>Tudo às claras.</h1><p>O que está funcionando, o que chegou e o que precisa de você.</p></div><CollectButton/></div>
-    <section className="panel"><h2>Operação local</h2><dl className="detail-list">
+    <section className="panel"><h2>Operação</h2><dl className="detail-list">
       <div><dt>Worker</dt><dd className={workerOnline ? "success-text" : "warning-text"}><span className="dot"/>{workerOnline ? "Online" : "Sem sinal recente"}</dd></div>
       <div><dt>Navegador habitual</dt><dd><a className="text-link" href="/conectar">{extension.online ? "Extensão online" : extension.paired ? "Abra o navegador com a extensão" : "Conectar extensão"}</a></dd></div>
       <div><dt>IA</dt><dd>{ai.message}</dd></div>

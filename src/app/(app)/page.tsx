@@ -1,18 +1,20 @@
 import Link from "next/link";
+import { requireSession } from "../../lib/session";
 import { connection } from "next/server";
 import { and, desc, eq, gte, ne, sql } from "drizzle-orm";
 import { ArrowRight, Check, Play, SlidersHorizontal, Sparkles, Radio, MessageSquare } from "lucide-react";
-import { getDatabase } from "../db/index";
-import { collectorRuns, feedback, processedItems, rawItems, sources } from "../db/schema";
-import { platformLabels } from "../collectors/types";
-import { adjustedScore, learnedWeights, rankingExpression } from "../lib/feedback";
+import { getDatabase } from "../../db/index";
+import { collectorRuns, feedback, processedItems, rawItems, sources } from "../../db/schema";
+import { platformLabels } from "../../collectors/types";
+import { adjustedScore, learnedWeights, rankingExpression } from "../../lib/feedback";
 import { OutsideBubble } from "./outside";
 import { DailyBriefing } from "./briefing";
-import { activeItemCondition, getProfile } from "../lib/store";
-import { aiStatus } from "../lib/config";
-import { CollectButton, FeedbackControls, TrackedLink, WorkRefresh, ExternalMark } from "./components";
+import { activeItemCondition, getProfile } from "../../lib/store";
+import { aiStatus } from "../../lib/config";
+import { CollectButton, FeedbackControls, TrackedLink, WorkRefresh, ExternalMark } from "../components";
 
 export default async function Home({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await requireSession();
   await connection();
   const db = getDatabase();
   const profile = getProfile(db);
@@ -39,7 +41,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   const initial = !profile?.interests.trim() || !personalSourceCount;
   return <><WorkRefresh active={!!running}/><div className="page-heading"><div><h1>Seu conteúdo, com contexto.</h1><p>Uma boa seleção começa com o que importa para você.</p></div>{channels.length > 0 && <CollectButton/>}</div>
     {initial ? <section className="onboarding"><div className="onboarding-intro"><div className="feature-symbol"><CompassIllustration/></div><h2>Seu próximo bom conteúdo começa aqui.</h2><p>Escolha seus interesses e os canais que quer acompanhar. O Orbit cuida de organizar o que merece sua atenção.</p><span className="quiet-label">Sem conteúdo de exemplo. Este espaço é seu.</span></div><div className="setup-list"><div className="setup-step"><div className={`step-indicator ${profile ? "done" : ""}`}>{profile ? <Check size={15} role="img" aria-label="Concluído"/> : "1"}</div><div><h3>Conte o que te interessa</h3><p>Seus temas favoritos e o que prefere deixar de fora.</p><Link href="/configuracoes" className="text-link">{profile ? "Editar interesses" : "Configurar interesses"}<ArrowRight size={16}/></Link></div></div><div className="setup-step"><div className={`step-indicator ${personalSourceCount ? "done" : ""}`}>{personalSourceCount ? <Check size={15} role="img" aria-label="Concluído"/> : "2"}</div><div><h3>Traga suas fontes</h3><p>Adicione os canais do YouTube que você acompanha.</p><Link href="/fontes" className="text-link">Adicionar canais<ArrowRight size={16}/></Link></div></div><div className="setup-step"><div className={`step-indicator ${ai.ready ? "done" : ""}`}>{ai.ready ? <Check size={15} role="img" aria-label="Concluído"/> : "3"}</div><div><h3>Conecte sua IA</h3><p>Use uma API compatível com OpenAI ou Anthropic.</p><Link href="/configuracoes#ia" className="text-link">Ver configuração<ArrowRight size={16}/></Link></div></div></div></section> : <>
-      {!ai.ready && <div className="notice"><Sparkles size={18}/><div><strong>{ai.state === "invalid" ? "A configuração da IA precisa de ajuste." : "Falta conectar sua IA."}</strong><p>{ai.state === "invalid" ? ai.message : "Você já pode coletar os vídeos. A análise começa depois de configurar URL, chave e modelo no .env."}</p><Link href="/configuracoes#ia">Ver instruções</Link></div></div>}
+      {!ai.ready && <div className="notice"><Sparkles size={18}/><div><strong>{ai.state === "invalid" ? "A configuração da IA precisa de ajuste." : "Falta conectar sua IA."}</strong><p>{ai.state === "invalid" ? ai.message : "Você já pode coletar os vídeos. A análise começa depois de configurar URL, chave e modelo no servidor (.env ou orbit.env)."}</p><Link href="/configuracoes#ia">Ver instruções</Link></div></div>}
       <DailyBriefing db={db}/>
       <section aria-labelledby="recommendations"><div className="section-heading"><div><h2 id="recommendations">Vale a pena ver</h2><p>Ordenado por relevância para seus interesses.</p></div><span className="count-label">{items.length} {items.length === 1 ? "recomendação" : "recomendações"}</span></div>
       <form method="get" className="filters"><SlidersHorizontal size={17} aria-hidden="true"/><label>Plataforma<select name="plataforma" defaultValue={platform}><option value="all">Todas</option><option value="youtube">YouTube</option><option value="x">X</option><option value="instagram">Instagram</option><option value="valete">Valete+</option></select></label><label>Tema<select name="tema" defaultValue={theme}><option value="">Todos os temas</option>{themes.map(({ theme }) => <option key={theme}>{theme}</option>)}</select></label><label>Período<select name="periodo" defaultValue={period}><option value="1">Últimas 24 horas</option><option value="7">Últimos 7 dias</option><option value="30">Últimos 30 dias</option><option value="all">Todo o período</option></select></label><label>Lista<select name="lista" defaultValue={list}><option value="all">Todos os itens</option><option value="saved">Salvos para depois</option><option value="seen">Já vistos</option><option value="unseen">Ainda não vistos</option></select></label><button className="button secondary" type="submit">Filtrar</button></form>

@@ -1,4 +1,5 @@
-import { test, expect, chromium } from "@playwright/test";
+import { chromium } from "@playwright/test";
+import { test, expect, password, totpSecret } from "./fixtures";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,7 @@ import { eq } from "drizzle-orm";
 import { openDatabase } from "../../src/db/index";
 import { sources, processedItems, briefings, topics, rawItems, companionJobs, collectorRuns, aiCalls } from "../../src/db/schema";
 import { enqueueCollection, saveRawItems } from "../../src/lib/store";
+import { sessionCookie, totpCode } from "../../src/lib/auth";
 
 test("configura interesses, adiciona fonte e funciona em desktop e celular", async ({ page }) => {
   await page.goto("/");
@@ -41,7 +43,7 @@ test("configura interesses, adiciona fonte e funciona em desktop e celular", asy
   await page.getByRole("link", { name: "Status", exact: true }).click();
   await page.getByRole("button", { name: "Atualizar fontes" }).click();
   await expect(page.getByText("Concluída", { exact: true }).first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText("Configure URL, chave e modelo no .env", { exact: true })).toBeVisible();
+  await expect(page.getByText("Configure URL, chave e modelo no .env (orbit.env no Docker)", { exact: true })).toBeVisible();
   await page.screenshot({ path: ".impeccable/review/desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: ".impeccable/review/mobile.png", fullPage: true });
@@ -108,7 +110,7 @@ test("salva, marca visto e aprende feedback no Meu perfil", async ({ page }) => 
 
 test("ativa e pausa feeds de navegador sem abrir contas reais", async ({ page }) => {
   await page.goto("/fontes");
-  await expect(page.getByText("npm run login -- youtube", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Abrir Home do YouTube" })).toHaveAttribute("href", "https://www.youtube.com/");
   await page.getByRole("button", { name: "Ativar fonte Home do YouTube", exact: true }).click();
   await page.getByRole("button", { name: "Pausar fonte Home do YouTube", exact: true }).click();
   await expect(page.getByRole("button", { name: "Ativar fonte Home do YouTube", exact: true })).toBeVisible();
@@ -174,7 +176,7 @@ test("pareia uma extensão real e recebe coleta pelo worker sem navegador automa
     await page.goto("/conectar");
     await page.getByRole("button", { name: "Gerar código de pareamento" }).click();
     const code = await page.getByLabel("Código temporário").inputValue();
-    await popup.getByLabel("Endereço da ponte local").fill("http://127.0.0.1:3102");
+    await popup.getByLabel("Endereço do Orbit").fill("http://127.0.0.1:3101");
     await popup.getByLabel("Código de pareamento").fill(code);
     await popup.getByRole("button", { name: "Conectar ao Orbit" }).click();
     await expect(popup.getByRole("status")).toContainText("Conectada", { timeout: 15000 });
@@ -183,7 +185,10 @@ test("pareia uma extensão real e recebe coleta pelo worker sem navegador automa
     await popup.locator("body").screenshot({ path: ".impeccable/review/extension-popup.png" });
     await page.reload();
     await expect(page.getByText("Extensão online", { exact: true })).toBeVisible();
-    await expect(page.getByText("0.2.2", { exact: true })).toBeVisible();
+    await expect(page.getByText("0.3.0", { exact: true })).toBeVisible();
+    const bundle = await page.request.get("/conectar/extensao");
+    expect(bundle.status()).toBe(200);
+    expect(bundle.headers()["content-type"]).toBe("application/zip");
     db.update(sources).set({ enabled: false }).run();
     const source = db.select().from(sources).where(eq(sources.kind, "youtube_home")).get() || db.insert(sources).values({ channelId: "https://www.youtube.com/", name: "Home", kind: "youtube_home", enabled: false }).returning().get();
     db.update(sources).set({ enabled: true }).where(eq(sources.id, source.id)).run();
@@ -212,7 +217,7 @@ test("pareia uma extensão real e recebe coleta pelo worker sem navegador automa
     const invalidRun = db.insert(collectorRuns).values({ parentId: parent.id, sourceId: source.id, status: "running", startedAt: Date.now() }).returning().get();
     const invalidJob = createCaptureJob(db, source.id, invalidRun.id); claimCaptureJob(db);
     const auth = await worker.evaluate(async () => (await chrome.storage.local.get<{ connection: { token: string } }>("connection")).connection.token);
-    const invalidResponse = await request.post("http://127.0.0.1:3102/api/extension/result", { headers: { Origin: `chrome-extension://${id}`, "X-Orbit-Extension-Id": id, Authorization: `Bearer ${auth}` }, data: { id: invalidJob.id, result: { items: [{ platform: "youtube", externalId: "qwerty12345", title: "Inválido", text: "", author: "Canal", url: "not-a-url", thumbnail: null, publishedAt: null, durationSeconds: null }] } } });
+    const invalidResponse = await request.post("/api/companion/result", { headers: { Origin: `chrome-extension://${id}`, "X-Orbit-Extension-Id": id, Authorization: `Bearer ${auth}` }, data: { id: invalidJob.id, result: { items: [{ platform: "youtube", externalId: "qwerty12345", title: "Inválido", text: "", author: "Canal", url: "not-a-url", thumbnail: null, publishedAt: null, durationSeconds: null }] } } });
     expect(invalidResponse.status()).toBe(400);
     expect(db.select().from(companionJobs).where(eq(companionJobs.id, invalidJob.id)).get()?.status).toBe("error");
     db.update(collectorRuns).set({ status: "error", finishedAt: Date.now() }).where(eq(collectorRuns.id, invalidRun.id)).run();
@@ -283,6 +288,107 @@ test("recusa submissão cross-origin e host de DNS rebinding", async ({ request 
   expect(cross.status()).toBe(403);
   const forgedExtension = await request.post("/api/extension/pair", { headers: { Origin: "https://attacker.example", "X-Orbit-Extension-Id": "a".repeat(32) }, data: { code: "invalid" } });
   expect(forgedExtension.status()).toBe(403);
-  const missingToken = await request.post("http://127.0.0.1:3102/api/extension/poll", { headers: { Origin: `chrome-extension://${"a".repeat(32)}`, "X-Orbit-Extension-Id": "a".repeat(32) }, data: {} });
+  const missingToken = await request.post("/api/companion/poll", { headers: { Origin: `chrome-extension://${"a".repeat(32)}`, "X-Orbit-Extension-Id": "a".repeat(32) }, data: {} });
   expect(missingToken.status()).toBe(401);
+});
+
+test("sem sessão, páginas levam ao login e ações e downloads são recusados", async ({ request }) => {
+  const home = await request.get("/status", { maxRedirects: 0 });
+  expect(home.status()).toBe(307);
+  expect(home.headers().location).toMatch(/\/login\?next=%2Fstatus$/);
+  expect((await request.get("/conectar/extensao", { maxRedirects: 0 })).status()).toBe(307);
+  expect((await request.post("/", { headers: { Origin: "http://127.0.0.1:3101" }, data: {} })).status()).toBe(401);
+  const forged = await request.get("/status", { maxRedirects: 0, headers: { Cookie: `${sessionCookie}=inventado` } });
+  expect(forged.status()).toBe(307);
+  expect(forged.headers().location).toMatch(/\/login\?next=%2Fstatus$/);
+  expect((await request.get("/api/health")).status()).toBe(200);
+  // Reprodução da revisão: cookie inventado não pode receber o payload RSC da página.
+  const rsc = await request.get("/perfil?_rsc=1", { maxRedirects: 0, headers: { RSC: "1", Cookie: `${sessionCookie}=inventado` } });
+  expect(rsc.status()).toBe(307);
+  expect(await rsc.text()).not.toContain("Ciência, tecnologia");
+});
+
+test("após o login, next com tab ou barra dupla não sai do Orbit", async ({ page }) => {
+  for (const next of ["%2F%09%2Fevil.example", "%2F%2Fevil.example", "%2F%5Cevil.example"]) {
+    const response = await page.request.get(`/login?next=${next}`, { maxRedirects: 0 });
+    expect(`${next} ${response.status()} ${new URL(response.headers().location, "http://127.0.0.1:3101").href}`).toBe(`${next} 307 http://127.0.0.1:3101/`);
+  }
+});
+
+test("entra com senha e código do autenticador e sai do dispositivo", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL });
+  try {
+    const page = await context.newPage();
+    await page.goto("/status");
+    await expect(page).toHaveURL(/\/login\?next=%2Fstatus$/);
+    await expect(page.getByRole("heading", { name: "Entrar no Orbit" })).toBeVisible();
+    await page.getByLabel("Senha").fill(password);
+    await page.getByLabel("Código do autenticador").fill("000000");
+    await page.getByRole("button", { name: "Entrar" }).click();
+    await expect(page.getByText("Senha ou código inválido.")).toBeVisible();
+    // Server Actions limpam o formulário após cada envio: a senha é digitada de novo.
+    await page.getByLabel("Senha").fill(password);
+    await page.getByLabel("Código do autenticador").fill(totpCode(totpSecret, Math.floor(Date.now() / 30_000)));
+    await page.getByRole("button", { name: "Entrar" }).click();
+    await expect(page.getByRole("heading", { name: "Tudo às claras." })).toBeVisible();
+    expect((await context.cookies()).find(cookie => cookie.name === sessionCookie)).toMatchObject({ httpOnly: true, secure: true, sameSite: "Strict" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/login");
+    await expect(page).toHaveURL(/\/$/);
+    await page.goto("/configuracoes");
+    await page.getByRole("button", { name: "Sair deste dispositivo" }).click();
+    await expect(page).toHaveURL(/\/login$/);
+    await page.goto("/status");
+    await expect(page).toHaveURL(/\/login\?next=%2Fstatus$/);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: ".impeccable/review/login-mobile.png", fullPage: true });
+  } finally { await context.close(); }
+});
+
+test("PWA instalável: manifest, ícones e service worker públicos e sem dados pessoais", async ({ request }) => {
+  const response = await request.get("/manifest.webmanifest");
+  expect(response.status()).toBe(200);
+  const manifest = await response.json();
+  expect(manifest).toMatchObject({ short_name: "Orbit", start_url: "/", scope: "/", display: "standalone", lang: "pt-BR" });
+  expect(manifest.icons.map((icon: { sizes: string; purpose: string }) => `${icon.sizes}:${icon.purpose}`)).toEqual(["192x192:any", "512x512:any", "512x512:maskable"]);
+  for (const path of [...manifest.icons.map((icon: { src: string }) => icon.src), "/apple-icon.png"]) {
+    const icon = await request.get(path, { maxRedirects: 0 });
+    expect(`${path} ${icon.status()} ${icon.headers()["content-type"]}`).toBe(`${path} 200 image/png`);
+  }
+  const worker = await request.get("/sw.js", { maxRedirects: 0 });
+  expect(worker.status()).toBe(200);
+  expect(worker.headers()["cache-control"]).toContain("no-store");
+  expect((await request.get("/offline.html", { maxRedirects: 0 })).status()).toBe(200);
+  expect((await request.get("/perfil", { maxRedirects: 0 })).status()).toBe(307);
+});
+
+test("guarda só a página offline, avisa a desconexão e não reenvia nada", async ({ page, context }) => {
+  await page.goto("/status");
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  const cached = await page.evaluate(async () => (await Promise.all((await caches.keys()).map(async key => (await (await caches.open(key)).keys()).map(entry => new URL(entry.url).pathname)))).flat());
+  expect(cached).toEqual(["/offline.html"]);
+  await context.setOffline(true);
+  await expect(page.getByText("Sem conexão com o Orbit.")).toBeVisible();
+  await page.goto("/perfil").catch(() => {});
+  await expect(page.getByRole("heading", { name: "Sem conexão com o Orbit" })).toBeVisible();
+  await context.setOffline(false);
+  await page.goto("/perfil");
+  await expect(page.getByRole("heading", { name: "Um perfil que você entende." })).toBeVisible();
+  await expect(page.getByText("Sem conexão com o Orbit.")).toBeHidden();
+});
+
+test("controles têm alvo de toque de pelo menos 24 px no celular", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const small: string[] = [];
+  for (const path of ["/", "/fontes", "/perfil", "/status", "/configuracoes", "/conectar"]) {
+    await page.goto(path);
+    // Links dentro de frases são exceção do WCAG 2.5.8.
+    small.push(...await page.evaluate(route => [...document.querySelectorAll<HTMLElement>("a, button, select, input:not([type=hidden]), textarea, summary")]
+      .filter(element => element.offsetParent !== null && !element.closest("p, li, dd, td"))
+      .map(element => ({ element, box: element.getBoundingClientRect() }))
+      .filter(({ box }) => box.width < 24 || box.height < 24)
+      .map(({ element, box }) => `${route} ${element.tagName} "${(element.getAttribute("aria-label") || element.textContent || "").trim().slice(0, 30)}" ${Math.round(box.width)}x${Math.round(box.height)}`), path));
+  }
+  expect(small).toEqual([]);
 });

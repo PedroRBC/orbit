@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Orbit — coletor local",
-  "version": "0.2.2",
-  "description": "Lê seus feeds em abas próprias e envia somente metadados ao Orbit local. Não lê cookies nem senhas.",
+  "name": "Orbit — coletor",
+  "version": "0.3.0",
+  "description": "Lê seus feeds em abas próprias e envia somente metadados ao seu Orbit. Não lê cookies nem senhas.",
   "minimum_chrome_version": "120",
   "permissions": ["storage", "alarms", "scripting", "declarativeNetRequest"],
   "host_permissions": [
@@ -15,7 +15,8 @@
     "https://www.instagram.com/*",
     "https://app.valete.org.br/*"
   ],
+  "optional_host_permissions": ["https://*/*"],
   "background": { "service_worker": "background.js" },
-  "action": { "default_popup": "popup.html", "default_title": "Orbit local" },
+  "action": { "default_popup": "popup.html", "default_title": "Orbit" },
   "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'" }
 }

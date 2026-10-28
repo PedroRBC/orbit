@@ -78,6 +78,10 @@ export function acquireLease(db: OrbitDB, owner: string, now = Date.now()): bool
   }, { behavior: "immediate" });
 }
 
+export function workerOnline(db: OrbitDB, now = Date.now()) {
+  return Number(getSetting(db, "worker_heartbeat") || 0) > now - 30_000;
+}
+
 export function assertLease(db: OrbitDB, owner: string) {
   const current = getSetting(db, "worker_lease");
   const lease = current ? JSON.parse(current) as { owner: string; expires: number } : null;

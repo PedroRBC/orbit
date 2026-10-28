@@ -10,9 +10,13 @@ async function refresh() {
 form.addEventListener("submit", async event => {
   event.preventDefault();
   const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+  const server = document.querySelector<HTMLInputElement>("#server")!.value;
   submit.disabled = true; message.textContent = "Conectando…";
   try {
-    const result = await chrome.runtime.sendMessage({ type: "pair", server: document.querySelector<HTMLInputElement>("#server")!.value, code: document.querySelector<HTMLInputElement>("#code")!.value });
+    const url = new URL(server);
+    // O pedido de permissão precisa ocorrer no clique, antes de qualquer outra espera.
+    if (url.protocol === "https:" && !await chrome.permissions.request({ origins: [`https://${url.hostname}/*`] })) throw new Error("Sem permissão para acessar o endereço do Orbit.");
+    const result = await chrome.runtime.sendMessage({ type: "pair", server, code: document.querySelector<HTMLInputElement>("#code")!.value });
     if (result?.error) throw new Error(result.error);
     document.querySelector<HTMLInputElement>("#code")!.value = "";
     await refresh();

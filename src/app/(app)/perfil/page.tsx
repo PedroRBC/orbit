@@ -1,12 +1,14 @@
 import { connection } from "next/server";
-import { getDatabase } from "../../db/index";
-import { getProfile } from "../../lib/store";
-import { learnedWeights } from "../../lib/feedback";
-import { saveProfile, saveTopicWeight } from "../actions";
-import { ActionForm, SubmitButton } from "../components";
+import { requireSession } from "../../../lib/session";
+import { getDatabase } from "../../../db/index";
+import { getProfile } from "../../../lib/store";
+import { learnedWeights } from "../../../lib/feedback";
+import { saveProfile, saveTopicWeight } from "../../actions";
+import { ActionForm, SubmitButton } from "../../components";
 
 export const metadata = { title: "Meu perfil" };
 export default async function ProfilePage() {
+  await requireSession();
   await connection();
   const db = getDatabase();
   const profile = getProfile(db);

@@ -2,22 +2,26 @@ import "dotenv/config";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
-import { bridgePort } from "../src/lib/extension-http";
 import { buildExtension } from "./build-extension";
 import { getDatabase } from "../src/db/index";
+import { authConfigured } from "../src/lib/auth";
 
 process.umask(0o077);
 const production = process.argv.includes("--production");
 const host = process.env.ORBIT_HOST || "127.0.0.1";
 const port = Number(process.env.PORT || 3000);
 if (!["127.0.0.1", "localhost", "::1", "0.0.0.0"].includes(host) || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("ORBIT_HOST ou PORT inválido.");
-for (const [targetPort, targetHost] of [[port, host], [bridgePort(), "127.0.0.1"]] as const) {
-  const probe = createServer();
-  await new Promise<void>((done, reject) => { probe.once("error", reject); probe.listen(targetPort, targetHost, () => probe.close(() => done())); });
+const probe = createServer();
+await new Promise<void>((done, reject) => { probe.once("error", reject); probe.listen(port, host, () => probe.close(() => done())); });
+// Em produção o bundle já sai de `npm run build`; a imagem tem raiz somente leitura.
+if (!production) await buildExtension();
+try { getDatabase(); }
+catch (error) {
+  // Volume com dono errado é o erro mais comum no NAS; a stack do SQLite não diz isso.
+  console.error(`Não foi possível abrir o banco em ${resolve(process.env.ORBIT_DB_PATH || "data/orbit.db")} (UID ${process.getuid?.() ?? "?"}). Confira se a pasta existe, pertence a este usuário e permite escrita.`);
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
 }
-if (bridgePort() === port) throw new Error("PORT e ORBIT_EXTENSION_PORT precisam ser diferentes.");
-await buildExtension();
-getDatabase();
 const children: ChildProcess[] = [];
 let closing = false;
 function stop(code = 0) {
@@ -43,8 +47,8 @@ function launch(args: string[]) {
 }
 process.on("SIGINT", () => stop());
 process.on("SIGTERM", () => stop());
-launch(["--import", "tsx", resolve("src/extension-server.ts")]);
 launch([resolve("node_modules/next/dist/bin/next"), production ? "start" : "dev", "--hostname", host, "--port", String(port)]);
 launch(["--import", "tsx", resolve("src/worker.ts")]);
 console.log(`Orbit: http://${host}:${port}`);
-if (host === "0.0.0.0") console.warn("Acesso LAN ativado explicitamente. O Orbit não possui login: use somente em rede confiável.");
+if (host === "0.0.0.0") console.log("Escutando em todas as interfaces. Outros dispositivos entram por HTTPS (proxy reverso) com o endereço listado em ORBIT_ALLOWED_HOSTS.");
+if (!authConfigured(getDatabase())) console.warn("Acesso ainda não configurado: rode `npm run auth -- setup` (no Docker: docker exec -it <contêiner> npm run auth -- setup).");
