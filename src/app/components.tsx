@@ -1,23 +1,12 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useActionState, useEffect, type ReactNode, type AnchorHTMLAttributes } from "react";
 import { useFormStatus } from "react-dom";
-import { Compass, Radio, Settings2, Activity, ArrowUpRight, RefreshCw, UserRound, ThumbsUp, ThumbsDown, Bookmark, Check } from "lucide-react";
+import { ArrowUpRight, RefreshCw, ThumbsUp, ThumbsDown, Bookmark, Check } from "lucide-react";
 import { beginPairing, recordClick, requestCollection, saveFeedback, type ActionResult } from "./actions";
 
-const navigation = [
-  { href: "/", label: "Para você", icon: Compass },
-  { href: "/fontes", label: "Fontes", icon: Radio },
-  { href: "/perfil", label: "Meu perfil", icon: UserRound },
-  { href: "/status", label: "Status", icon: Activity },
-  { href: "/configuracoes", label: "Configurações", icon: Settings2 },
-];
-export function Navigation() {
-  const pathname = usePathname();
-  return <nav aria-label="Navegação principal">{navigation.map(({ href, label, icon: Icon }) => <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined}><Icon size={19} aria-hidden="true"/><span>{label}</span></Link>)}</nav>;
-}
+export { Navigation } from "./navigation";
 
 export function ActionForm({ action, children, className = "" }: { action: (previous: ActionResult, data: FormData) => Promise<ActionResult>; children: ReactNode; className?: string }) {
   const [state, formAction] = useActionState(action, { message: "" });

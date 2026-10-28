@@ -12,7 +12,7 @@ Aprovado: TypeScript, Next.js App Router, Tailwind, SQLite/Drizzle e worker Node
 
 ## Users
 
-Uma pessoa usando seu próprio computador para acompanhar conteúdo que seus feeds e canais mostram. Não é um produto multiusuário.
+Uma pessoa acompanhando seus feeds, canais e fontes externas pelo computador ou celular. É um serviço próprio de uso pessoal, não um produto multiusuário.
 
 ## Product Purpose
 
@@ -20,7 +20,7 @@ Reduzir o tempo gasto escolhendo o que ler ou assistir. Recomendações devem ex
 
 ## Operating Context
 
-Servidor em localhost por padrão. Acesso pelo celular exige ativação explícita. Interface em português do Brasil e dark mode, conforme PROJETO.md. Fases 1–4 autorizadas: YouTube RSS/home, X, Instagram, Valete+, configuração, recomendações, briefing, tópicos, feedback, perfil e status. Login nas plataformas é feito no navegador habitual, com uma extensão local pareada. Nenhum cookie é exportado. Instalação manual da extensão e navegador aberto são requisitos aprovados pelo usuário. A fase 5 foi autorizada: fontes RSS externas claramente separadas, agenda local e painel de custo. Nenhum portal/interesse é presumido.
+Serviço próprio pensado para Docker, com login por senha e TOTP. Domínio, HTTPS e acesso remoto são configurados pelo usuário; não há modo alternativo sem login. Interface em português do Brasil e dark mode. Login nas plataformas é feito no navegador habitual, com uma extensão pareada ao servidor. Nenhum cookie é exportado. Instalação manual da extensão e navegador aberto são requisitos aprovados. Fontes RSS externas permanecem separadas do feed e do briefing pessoais; nenhum portal ou interesse é presumido. A direção editorial de 28/10/2026 prioriza leitura e arquivo, mantendo fontes, configuração, diagnóstico e extensão acessíveis em navegação secundária.
 
 ## Capabilities and Constraints
 
@@ -28,7 +28,7 @@ Canais e interesses serão cadastrados na interface, conforme resposta do usuár
 
 ## Brand Commitments
 
-Nome Orbit. Interface limpa, responsiva e escura. Navegação previsível e estados vazios com ações concretas.
+Nome Orbit. Interface limpa, responsiva e escura, com lavanda para ação, foco e seleção. Hoje, Briefings e Temas formam a navegação principal; Meu perfil fica no masthead. Sem branding de plano ou indicadores de saúde presumidos. Estados vazios, de carregamento e de erro ajudam a continuar a tarefa, com ações reais e sem conteúdo de exemplo.
 
 ## Evidence on Hand
 

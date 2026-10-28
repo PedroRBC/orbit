@@ -10,6 +10,7 @@ import { openDatabase } from "../../src/db/index";
 import { sources, processedItems, briefings, topics, rawItems, companionJobs, collectorRuns, aiCalls } from "../../src/db/schema";
 import { enqueueCollection, saveRawItems } from "../../src/lib/store";
 import { sessionCookie, totpCode } from "../../src/lib/auth";
+import { normalizeTheme } from "../../src/lib/taxonomy";
 
 test("configura interesses, adiciona fonte e funciona em desktop e celular", async ({ page }) => {
   await page.goto("/");
@@ -29,7 +30,7 @@ test("configura interesses, adiciona fonte e funciona em desktop e celular", asy
   await page.getByLabel("O que você prefere evitar").fill("Publicidade e sensacionalismo");
   await page.getByRole("button", { name: "Salvar interesses" }).click();
   await expect(page.getByRole("status")).toContainText("Interesses salvos");
-  await page.getByRole("link", { name: "Para você", exact: true }).click();
+  await page.getByRole("link", { name: "Hoje", exact: true }).click();
   await expect(page.getByRole("img", { name: "Concluído" })).toBeVisible();
   await page.getByRole("link", { name: "Fontes", exact: true }).click();
   await page.getByLabel("Nome do canal").fill("Canal de teste E2E");
@@ -48,32 +49,33 @@ test("configura interesses, adiciona fonte e funciona em desktop e celular", asy
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: ".impeccable/review/mobile.png", fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("link", { name: "Configurações", exact: true }).click();
   await expect(page.getByLabel("Seus interesses")).toHaveValue("Ciência, tecnologia e educação");
 });
 
 test("renderiza ranking e filtros com fixtures sintéticas somente no banco de teste", async ({ page }) => {
   const db = openDatabase(resolve("test-results/e2e.db"));
-  const source = db.select().from(sources).get()!;
+  const source = db.select().from(sources).where(eq(sources.kind, "youtube_rss")).get()!;
   db.update(sources).set({ enabled: true }).where(eq(sources.id, source.id)).run();
   for (const [index, theme, score] of [[0, "Ciência", 95], [1, "Tecnologia", 60]] as const) {
     const id = `orbitvideo${index}`;
     saveRawItems(db, source.id, [{ platform: "youtube", externalId: id, title: `Fixture sintética ${theme}`, text: "Conteúdo somente para teste automatizado.", author: "Canal de teste", url: `https://www.youtube.com/watch?v=${id}`, thumbnail: null, publishedAt: Date.now(), durationSeconds: null }]);
-    db.insert(processedItems).values({ rawId: `youtube:${id}`, theme, tone: "informativo", language: "pt", type: "educação", score, reason: "Justificativa sintética para verificar a interface.", summary: "Resumo de teste, não uma recomendação real.", isSpam: false, model: "fixture", processedAt: Date.now() }).run();
+    db.insert(processedItems).values({ rawId: `youtube:${id}`, theme: normalizeTheme(theme)!, tone: "informativo", language: "pt", type: "educação", score, reason: "Justificativa sintética para verificar a interface.", summary: "Resumo de teste, não uma recomendação real.", isSpam: false, model: "fixture", processedAt: Date.now() }).run();
   }
   const briefing = db.insert(briefings).values({ snapshot: "fixture-only", introduction: "Este briefing sintético serve apenas ao teste automatizado. Não descreve notícias reais.", createdAt: Date.now(), windowFrom: Date.now() - 86400000, windowTo: Date.now(), model: "fixture", sourceCount: 2, candidateCount: 3, budgetLimited: true }).returning().get();
   for (const [index, theme] of [[0, "Ciência"], [1, "Tecnologia"]] as const) db.insert(topics).values({ id: `fixture-topic-${index}`, briefingId: briefing.id, position: index, title: `Tópico sintético ${theme}`, summary: "Resumo de tópico sintético para verificar fontes e leitura. Não é notícia real.", itemIds: JSON.stringify([`youtube:orbitvideo${index}`]) }).run();
   db.$client.close();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Briefing do dia", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Seu briefing pessoal", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Tópico sintético Ciência" })).toBeVisible();
   await expect(page.getByText(/O orçamento reduziu a amostra/)).toBeVisible();
   await expect(page.getByLabel("Fontes de Tópico sintético Ciência").getByRole("link")).toHaveAttribute("href", "https://www.youtube.com/watch?v=orbitvideo0");
   await expect(page.getByRole("article").first()).toContainText("Fixture sintética Ciência");
   await expect(page.getByText("95/100")).toBeVisible();
   await page.screenshot({ path: ".impeccable/review/home-desktop.png", fullPage: true });
-  await page.getByRole("combobox", { name: "Tema", exact: true }).selectOption("Tecnologia");
+  await page.getByRole("combobox", { name: "Tema", exact: true }).selectOption("tecnologia");
   await page.getByRole("button", { name: "Filtrar", exact: true }).click();
   await expect(page.getByRole("article")).toHaveCount(1);
   await expect(page.getByRole("article")).toContainText("Fixture sintética Tecnologia");
@@ -95,11 +97,11 @@ test("salva, marca visto e aprende feedback no Meu perfil", async ({ page }) => 
   await expect(page.getByRole("button", { name: "Já vi", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("link", { name: "Meu perfil", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Um perfil que você entende." })).toBeVisible();
-  await expect(page.getByRole("spinbutton", { name: "Peso de Ciência", exact: true })).toHaveValue("4");
-  await page.getByRole("spinbutton", { name: "Peso de Ciência", exact: true }).fill("7");
-  await page.getByRole("button", { name: "Salvar peso de Ciência" }).click();
+  await expect(page.getByRole("spinbutton", { name: "Peso de Ciência e saúde", exact: true })).toHaveValue("4");
+  await page.getByRole("spinbutton", { name: "Peso de Ciência e saúde", exact: true }).fill("7");
+  await page.getByRole("button", { name: "Salvar peso de Ciência e saúde" }).click();
   await page.reload();
-  await expect(page.getByRole("spinbutton", { name: "Peso de Ciência", exact: true })).toHaveValue("7");
+  await expect(page.getByRole("spinbutton", { name: "Peso de Ciência e saúde", exact: true })).toHaveValue("7");
   await page.getByRole("heading", { name: "Um perfil que você entende." }).click();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: ".impeccable/review/profile-desktop.png", fullPage: true });
@@ -132,7 +134,7 @@ test("filtra posts do X e distingue sua evidência de vídeos RSS", async ({ pag
   const db = openDatabase(resolve("test-results/e2e.db"));
   const source = db.insert(sources).values({ channelId: "https://x.com/home", name: "X · Para você", platform: "x", kind: "x_for_you", enabled: true }).onConflictDoUpdate({ target: sources.channelId, set: { enabled: true } }).returning().get();
   saveRawItems(db, source.id, [{ platform: "x", evidence: "x_for_you", externalId: "1234567890123456789", title: "Post sintético do X", text: "Texto somente para teste", author: "Autor sintético", url: "https://x.com/autor/status/1234567890123456789", thumbnail: null, publishedAt: Date.now(), durationSeconds: null, metrics: { likes: "42" } }]);
-  db.insert(processedItems).values({ rawId: "x:1234567890123456789", theme: "Atualidades", tone: "informativo", language: "pt", type: "opinião", score: 80, reason: "Justificativa sintética.", summary: "Resumo apenas para teste.", isSpam: false, model: "fixture", processedAt: Date.now() }).run();
+  db.insert(processedItems).values({ rawId: "x:1234567890123456789", theme: "outros", tone: "informativo", language: "pt", type: "opinião", score: 80, reason: "Justificativa sintética.", summary: "Resumo apenas para teste.", isSpam: false, model: "fixture", processedAt: Date.now() }).run();
   db.$client.close();
   await page.goto("/?plataforma=x&periodo=all");
   await expect(page.getByRole("article")).toHaveCount(1);
@@ -245,10 +247,10 @@ test("configura RSS externo, separa Fora da bolha e persiste a agenda pausada", 
   await page.getByRole("button", { name: "Adicionar RSS", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Portal sintético de teste" })).toBeVisible();
   const db = openDatabase(resolve("test-results/e2e.db"));
-  const source = db.select().from(sources).where(eq(sources.kind, "news_rss")).get()!;
+  const source = db.select().from(sources).where(eq(sources.channelId, "https://news.example.com/rss")).get()!;
   for (const [index, theme] of [[0, "Saúde"], [1, "Mundo"], [2, "Sem IA"]] as const) {
     saveRawItems(db, source.id, [{ platform: "news", evidence: "news_rss", externalId: `fixture-external-${index}`, title: `Manchete externa sintética ${theme}`, text: "Trecho do portal usado apenas em teste automatizado.", author: "Portal sintético", url: `https://news.example.com/article-${index}`, thumbnail: null, publishedAt: Date.now(), durationSeconds: null }]);
-    if (index < 2) db.insert(processedItems).values({ rawId: `news:fixture-external-${index}`, theme, tone: "informativo", language: "pt", type: "notícia", score: 80, reason: "Interesse público sintético", summary: "Resumo apenas para teste, não notícia real.", isSpam: false, model: "fixture", processedAt: Date.now() }).run();
+    if (index < 2) db.insert(processedItems).values({ rawId: `news:fixture-external-${index}`, theme: index === 0 ? "ciencia-saude" : "politica-externa", tone: "informativo", language: "pt", type: "notícia", score: 80, reason: "Interesse público sintético", summary: "Resumo apenas para teste, não notícia real.", isSpam: false, model: "fixture", processedAt: Date.now() }).run();
   }
   db.$client.close();
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -263,14 +265,14 @@ test("configura RSS externo, separa Fora da bolha e persiste a agenda pausada", 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: ".impeccable/review/final-mobile.png", fullPage: true });
   await page.goto("/configuracoes");
-  await page.getByLabel("Agendamento ativo", { exact: true }).uncheck();
+  await page.getByLabel("Agendamento de coleta ativo", { exact: true }).uncheck();
   await page.getByLabel("Horários (cron)").fill("0 8,14,20 * * *");
-  await page.getByLabel("Fuso horário").fill("America/Sao_Paulo");
-  await page.getByRole("button", { name: "Salvar agenda" }).click();
+  await page.getByLabel("Fuso da coleta").fill("America/Sao_Paulo");
+  await page.getByRole("button", { name: "Salvar agenda", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Agenda salva");
   await page.reload();
-  await expect(page.getByLabel("Agendamento ativo", { exact: true })).not.toBeChecked();
-  await expect(page.getByLabel("Fuso horário")).toHaveValue("America/Sao_Paulo");
+  await expect(page.getByLabel("Agendamento de coleta ativo", { exact: true })).not.toBeChecked();
+  await expect(page.getByLabel("Fuso da coleta")).toHaveValue("America/Sao_Paulo");
   const costDB = openDatabase(resolve("test-results/e2e.db"));
   const call = costDB.insert(aiCalls).values({ day: new Date().toISOString().slice(0, 10), tokens: 50000, cost: null, status: "reserved", createdAt: Date.now() }).returning().get();
   try {

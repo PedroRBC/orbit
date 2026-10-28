@@ -14,7 +14,7 @@ export function DailyBriefing({ db }: { db: OrbitDB }) {
     const ready = aiStatus().briefingReady;
     const stored = getSetting(db, "briefing_notice");
     const notice = ready && /^Configure AI_BRIEFING_MODEL/.test(stored || "") ? undefined : stored;
-    return <section className="briefing-panel briefing-empty" aria-labelledby="briefing-title"><h2 id="briefing-title">Briefing do dia</h2><p>{notice || (ready ? "Modelo de briefing configurado. Atualize as fontes para gerar seu recorte com os itens classificados." : "Depois de conectar o modelo de briefing e atualizar as fontes, seu recorte do dia aparece aqui.")}</p><Link href={ready ? "/status" : "/configuracoes#ia"} className="text-link">{ready ? "Acompanhar geração do briefing" : "Configurar modelo de briefing"}</Link></section>;
+    return <section className="briefing-panel briefing-empty" aria-labelledby="briefing-title"><h2 id="briefing-title">Seu briefing pessoal</h2><p>{notice || (ready ? "Modelo de briefing configurado. Atualize as fontes para gerar seu recorte com os itens classificados." : "Depois de conectar o modelo de briefing e atualizar as fontes, seu recorte do dia aparece aqui.")}</p><Link href={ready ? "/status" : "/configuracoes#ia"} className="text-link">{ready ? "Acompanhar geração do briefing" : "Configurar modelo de briefing"}</Link></section>;
   }
   const groups = db.select().from(topics).where(eq(topics.briefingId, briefing.id)).orderBy(topics.position).all().map(topic => ({ ...topic, ids: z.array(z.string()).parse(JSON.parse(topic.itemIds)) }));
   const ids = groups.flatMap(topic => topic.ids);
@@ -22,7 +22,7 @@ export function DailyBriefing({ db }: { db: OrbitDB }) {
   const wordCount = `${briefing.introduction} ${groups.map(topic => topic.summary).join(" ")}`.trim().split(/\s+/).length;
   const stale = briefing.createdAt < Date.now() - 86_400_000;
   return <section className="briefing-panel" aria-labelledby="briefing-title">
-    <div className="section-heading"><div><h2 id="briefing-title">Briefing do dia</h2><p>{new Date(briefing.createdAt).toLocaleString("pt-BR")} · {wordCount < 180 ? "Leitura breve" : `${Math.max(1, Math.ceil(wordCount / 200))} min de leitura`}</p></div><span className="count-label">{briefing.sourceCount} itens na amostra</span></div>
+    <div className="section-heading"><div><h2 id="briefing-title">Seu briefing pessoal</h2><p>{new Date(briefing.createdAt).toLocaleString("pt-BR")} · {wordCount < 180 ? "Leitura breve" : `${Math.max(1, Math.ceil(wordCount / 200))} min de leitura`}</p></div><span className="count-label">{briefing.sourceCount} itens na amostra</span></div>
     <p className="briefing-disclaimer">O que seu feed está mostrando — não necessariamente o mais importante no mundo. As fontes podem trazer opiniões e alegações não verificadas.</p>
     {stale && <p className="warning-text field-help">Este é o último briefing disponível, gerado há mais de 24 horas. Atualize as fontes para gerar um novo.</p>}
     {briefing.budgetLimited ? <p className="warning-text field-help">O orçamento reduziu a amostra: {briefing.sourceCount} de {briefing.candidateCount} itens selecionados. Este recorte fica em cache até mudar o conteúdo, o perfil ou o dia UTC.</p> : briefing.sourceCount < 5 && <p className="field-help">Amostra pequena: briefing reduzido para não preencher lacunas com conteúdo inventado.</p>}

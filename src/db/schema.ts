@@ -1,4 +1,5 @@
 import { integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+export { pushSubscriptions, pushDeliveries } from "./push-schema";
 
 export const sources = sqliteTable("sources", {
   id: integer().primaryKey({ autoIncrement: true }),
@@ -21,6 +22,7 @@ export const rawItems = sqliteTable("raw_items", {
   url: text().notNull().unique(),
   thumbnail: text(),
   publishedAt: integer(),
+  newsPublishedAt: integer(),
   durationSeconds: integer(),
   evidence: text({ enum: ["rss", "youtube_home", "x_for_you", "instagram_feed", "valete_feed", "valete_dom", "news_rss"] }).notNull().default("rss"),
   metrics: text({ mode: "json" }).$type<Record<string, string>>(),
@@ -60,6 +62,8 @@ export const collectorRuns = sqliteTable("collector_runs", {
   sourceId: integer().references(() => sources.id),
   parentId: integer(),
   trigger: text({ enum: ["manual", "scheduled"] }).notNull().default("manual"),
+  kind: text({ enum: ["collection", "edition"] }).notNull().default("collection"),
+  editionId: integer().references(() => editions.id),
   status: text().notNull(),
   startedAt: integer().notNull(),
   finishedAt: integer(),
@@ -88,6 +92,33 @@ export const briefings = sqliteTable("briefings", {
   windowTo: integer().notNull(),
   model: text().notNull(),
   sourceCount: integer().notNull(),
+  candidateCount: integer().notNull().default(0),
+  budgetLimited: integer({ mode: "boolean" }).notNull().default(false),
+});
+
+export type EditionContent = {
+  introduction: string;
+  highlights: { title: string; summary: string; context: string; relevance: string; itemIds: string[] }[];
+};
+
+export const editions = sqliteTable("editions", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  slot: text().notNull().unique(),
+  localDate: text().notNull(),
+  edition: text({ enum: ["morning", "afternoon"] }).notNull(),
+  timezone: text().notNull(),
+  scheduledAt: integer().notNull(),
+  windowFrom: integer().notNull(),
+  windowTo: integer().notNull(),
+  status: text({ enum: ["queued", "running", "published", "unavailable", "error"] }).notNull().default("queued"),
+  attempts: integer().notNull().default(0),
+  createdAt: integer().notNull(),
+  generatedAt: integer(),
+  content: text({ mode: "json" }).$type<EditionContent>(),
+  itemIds: text({ mode: "json" }).$type<string[]>().notNull().default([]),
+  model: text(),
+  notice: text(),
+  sourceCount: integer().notNull().default(0),
   candidateCount: integer().notNull().default(0),
   budgetLimited: integer({ mode: "boolean" }).notNull().default(false),
 });

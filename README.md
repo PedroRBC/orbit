@@ -4,12 +4,23 @@ Curador pessoal de conteúdo, local e em português. **Cinco fases implementadas
 
 Não confunda o que seus feeds mostram com uma visão completa do mundo. O Orbit indica fontes e limites da análise.
 
+## Versão 0.2.1 — evolução editorial
+
+Esta versão acrescenta apresentação editorial, oito temas controlados, **briefings gerais às 08h/16h** e **Web Push na PWA**. O serviço continua privado, com login e um único usuário. A publicação usa a tag `v0.2.1` e o destino privado existente; a imagem só deve ser considerada disponível após a CI concluir testes e verificações de privacidade/tags/digest. Nenhuma alteração no NAS faz parte desta publicação.
+
+- [Taxonomia e consolidação auditada](docs/taxonomy.md): IDs fixos, aliases e pesos combinados por média, sem reclassificação paga. Faça backup antes de atualizar um banco real.
+- [Briefings gerais](docs/briefings.md): fontes públicas escolhidas por você, fechamento/período/fuso visíveis, arquivo autenticado e agenda independente dos feeds pessoais.
+- [Web Push e instalação por aparelho](docs/push.md): configurar `ORBIT_PUSH_SUBJECT`, ativar no clique, testar, desativar e entender os limites Android/iOS.
+- [Validação desta evolução e roteiro no celular](docs/validation-editorial.md).
+
+Em **Configurações → Briefings gerais**, confirme o fuso e ative os horários. Sem fuso explícito, a proposta é `America/Sao_Paulo`, sem ativação silenciosa. RSS externos nunca entram nas recomendações ou no briefing pessoais. Para push no Docker, o contato é variável do contêiner, não uma chave `AI_*` de `orbit.env`.
+
 ## Docker, TrueNAS e celular
 
 O Orbit roda como um serviço em contêiner: interface, worker e migrações juntos, banco SQLite persistente e IA configurada fora da imagem. Pelo endereço HTTPS, ele pode ser instalado no celular como app (PWA). Instalação, volumes, acesso remoto, login, extensão, PWA no Android/iPhone, backup, atualização e diagnóstico estão em [docs/deploy.md](docs/deploy.md).
 
 - [PR de implantação #2](https://github.com/PedroRBC/orbit/pull/2).
-- [Pacote privado no GHCR](https://github.com/users/PedroRBC/packages/container/package/orbit): versão oficial `ghcr.io/pedrorbc/orbit:0.2.0`, também disponível como `:latest` e `:sha-<commit curto>`.
+- [Pacote privado no GHCR](https://github.com/users/PedroRBC/packages/container/package/orbit): versão desta entrega `ghcr.io/pedrorbc/orbit:0.2.1`, publicada pela tag após CI aprovada, junto de `:sha-<commit curto>`. `:latest` acompanha somente a main, que não é alterada por este lançamento.
 - [Publicações da main](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml?query=branch%3Amain): cada execução confere privacidade, tags e digest; consulte a última publicação aprovada antes de instalar ou atualizar.
 - [Registro de validação](docs/validation-self-hosted.md): testes executados e pendências no NAS/celular, incluindo a [publicação anterior do candidato](https://github.com/PedroRBC/orbit/actions/runs/40696551059).
 
@@ -95,7 +106,7 @@ Proteção de rede: hostname HTTPS, sem IP literal, credenciais ou porta especia
 
 ## Agendamento local
 
-Padrão: **08:00, 14:00 e 20:00 no fuso do computador**. Edite/pausa em **Configurações → Coleta no seu ritmo**. Defaults do `.env`:
+A agenda de **coleta pessoal** usa, por padrão, **08:00, 14:00 e 20:00 no fuso do computador**. Edite/pause em **Configurações → Coleta pessoal**. Ela é independente dos briefings gerais 08h/16h. Defaults do `.env`:
 
 ```dotenv
 SCHEDULER_ENABLED=true

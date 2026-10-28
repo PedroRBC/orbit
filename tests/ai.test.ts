@@ -3,10 +3,11 @@ import { createServer, type Server } from "node:http";
 import { getAIConfig } from "../src/lib/config";
 import { requestClassification } from "../src/ai/provider";
 import { validateClassification } from "../src/ai/classify";
+import { THEME_IDS } from "../src/lib/taxonomy";
 
 const servers: Server[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); await Promise.all(servers.splice(0).map(server => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }))); });
-const result = { items: [{ id: "youtube:abcdefghijk", theme: "Ciência", tone: "informativo", language: "pt", type: "educação", score: 84, reason: "Combina com seus interesses.", summary: "Descrição da aula.", isSpam: false }] };
+const result = { items: [{ id: "youtube:abcdefghijk", theme: "ciencia-saude", tone: "informativo", language: "pt", type: "educação", score: 84, reason: "Combina com seus interesses.", summary: "Descrição da aula.", isSpam: false }] };
 
 async function endpoint(protocol: "openai" | "anthropic") {
   const requests: { path: string; body: Record<string, unknown>; key: string | undefined; auth: string | undefined; inherited: string | undefined }[] = [];
@@ -56,6 +57,12 @@ describe("configuração e protocolos", () => {
     const outcome = await Promise.race([pending, new Promise<string>(resolve => setTimeout(() => resolve("still-reading"), 100))]);
     closeBody?.();
     expect(outcome).toBe("aborted");
+  });
+  it("aceita apenas IDs do catálogo como tema da IA, não aliases ou rótulos livres", () => {
+    for (const theme of THEME_IDS) expect(validateClassification(JSON.stringify({ items: [{ ...result.items[0], theme }] }), [result.items[0].id])[0].theme).toBe(theme);
+    for (const theme of ["Ciência", "Technology", "Política brasileira", "novo-assunto", "__proto__", "", "TECNOLOGIA"]) {
+      expect(() => validateClassification(JSON.stringify({ items: [{ ...result.items[0], theme }] }), [result.items[0].id])).toThrow();
+    }
   });
   it("rejeita respostas incompletas, repetidas e IDs não solicitados", () => {
     expect(validateClassification(JSON.stringify(result), ["youtube:abcdefghijk"])).toEqual(result.items);

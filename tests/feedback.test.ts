@@ -11,7 +11,7 @@ function setup() {
   const source = db.insert(sources).values({ channelId: "channel", name: "Canal" }).returning().get();
   db.insert(interestProfile).values({ id: 1, interests: "Ciência", excluded: "", updatedAt: 1 }).run();
   db.insert(rawItems).values({ id: "youtube:item", sourceId: source.id, externalId: "item", platform: "youtube", title: "Aula", text: "Ciência", author: "Canal", url: "https://www.youtube.com/watch?v=abcdefghijk", fetchedAt: 1 }).run();
-  db.insert(processedItems).values({ rawId: "youtube:item", theme: "Ciência", tone: "informativo", language: "pt", type: "educação", score: 80, reason: "Perfil", summary: "Resumo", isSpam: false, model: "test", processedAt: 1 }).run();
+  db.insert(processedItems).values({ rawId: "youtube:item", theme: "ciencia-saude", tone: "informativo", language: "pt", type: "educação", score: 80, reason: "Perfil", summary: "Resumo", isSpam: false, model: "test", processedAt: 1 }).run();
   return db;
 }
 
@@ -19,27 +19,27 @@ describe("feedback e aprendizado local", () => {
   it("votos são reversíveis, sem multiplicar sinais no mesmo item", () => {
     const db = setup();
     applyFeedback(db, "youtube:item", "up");
-    expect(learnedWeights(db)).toEqual({ Ciência: 3 });
+    expect(learnedWeights(db)).toEqual({ "ciencia-saude": 3 });
     applyFeedback(db, "youtube:item", "up");
-    expect(learnedWeights(db)).toEqual({ Ciência: 0 });
+    expect(learnedWeights(db)).toEqual({ "ciencia-saude": 0 });
     applyFeedback(db, "youtube:item", "down");
-    expect(learnedWeights(db)).toEqual({ Ciência: -3 });
+    expect(learnedWeights(db)).toEqual({ "ciencia-saude": -3 });
     expect(adjustedScore(80, -3)).toBe(74);
   });
   it("salvar, visto e cliques persistem; múltiplos cliques não inflam o tema", () => {
     const db = setup();
     applyFeedback(db, "youtube:item", "save"); applyFeedback(db, "youtube:item", "seen");
     applyFeedback(db, "youtube:item", "click"); applyFeedback(db, "youtube:item", "click");
-    expect(learnedWeights(db)).toEqual({ Ciência: 2 });
+    expect(learnedWeights(db)).toEqual({ "ciencia-saude": 2 });
     expect(db.select().from(feedback).get()).toMatchObject({ saved: true, seen: true, clicked: true });
     applyFeedback(db, "youtube:item", "save");
-    expect(learnedWeights(db)).toEqual({ Ciência: 1 });
+    expect(learnedWeights(db)).toEqual({ "ciencia-saude": 1 });
   });
   it("preserva o ajuste manual quando um novo sinal chega", () => {
     const db = setup();
     updateTopicWeight(db, "Ciência", 7);
     applyFeedback(db, "youtube:item", "up");
-    expect(learnedWeights(db)).toEqual({ Ciência: 10 });
+    expect(learnedWeights(db)).toEqual({ "ciencia-saude": 10 });
     expect(adjustedScore(95, 10)).toBe(100);
     expect(() => updateTopicWeight(db, "Ciência", 100)).toThrow();
   });
@@ -47,14 +47,23 @@ describe("feedback e aprendizado local", () => {
     const db = setup();
     updateTopicWeight(db, "Ciência", 20);
     applyFeedback(db, "youtube:item", "up");
-    expect(learnedWeights(db)).toEqual({ Ciência: 20 });
+    expect(learnedWeights(db)).toEqual({ "ciencia-saude": 20 });
     applyFeedback(db, "youtube:item", "up");
-    expect(learnedWeights(db)).toEqual({ Ciência: 20 });
+    expect(learnedWeights(db)).toEqual({ "ciencia-saude": 20 });
   });
   it("normaliza espaço no tema editado antes de aplicar ao ranking", () => {
     const db = setup();
     updateTopicWeight(db, " Ciência ", 7);
-    expect(learnedWeights(db)).toEqual({ Ciência: 7 });
+    expect(learnedWeights(db)).toEqual({ "ciencia-saude": 7 });
+  });
+  it("aceita aliases pt/en e acentos, mas não cria pesos de tema livre", () => {
+    const db = setup();
+    updateTopicWeight(db, " CIÊNCIA ", 2.5);
+    updateTopicWeight(db, "Science and health", 4.5);
+    expect(learnedWeights(db)).toEqual({ "ciencia-saude": 4.5 });
+    expect(() => updateTopicWeight(db, "assunto inventado", 2)).toThrow(/catálogo|taxonomia/);
+    applyFeedback(db, "youtube:item", "up"); applyFeedback(db, "youtube:item", "up");
+    expect(learnedWeights(db)).toEqual({ "ciencia-saude": 4.5 });
   });
   it("rejeita IDs inexistentes sem alterar o perfil", () => {
     const db = setup();

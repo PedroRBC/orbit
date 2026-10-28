@@ -1,19 +1,82 @@
 import { connection } from "next/server";
 import { requireSession } from "../../../lib/session";
-import { LockKeyhole, Sparkles, ArrowUpRight } from "lucide-react";
+import { LockKeyhole, ArrowUpRight } from "lucide-react";
+import { desc, eq } from "drizzle-orm";
+import { editions } from "../../../db/schema";
 import { getDatabase } from "../../../db/index";
 import { getProfile } from "../../../lib/store";
 import { readSchedule } from "../../../lib/scheduler";
+import { readEditionSchedule } from "../../../lib/editions";
 import { aiStatus } from "../../../lib/config";
-import { logout, saveProfile, saveSchedule } from "../../actions";
+import { logout, saveEditionSchedule, saveProfile, saveSchedule } from "../../actions";
 import { ActionForm, SubmitButton } from "../../components";
+import { PushSettings } from "../../push-settings";
 
 export const metadata = { title: "Configurações" };
 export default async function SettingsPage() {
   await requireSession();
   await connection();
-  const profile = getProfile(getDatabase());
+  const db = getDatabase();
+  const profile = getProfile(db);
   const ai = aiStatus();
-  const schedule = readSchedule(getDatabase());
-  return <><div className="page-heading"><div><h1>Do seu jeito.</h1><p>Você escolhe o que importa. E o que fica de fora.</p></div></div><div className="settings-layout"><section className="panel interests-panel"><h2>Seu ponto de partida</h2><p>Este perfil orienta as próximas análises. Itens já classificados não serão reprocessados.</p><ActionForm action={saveProfile} className="stack-form"><label htmlFor="interests">Seus interesses</label><textarea id="interests" name="interests" rows={5} required maxLength={2000} defaultValue={profile?.interests ?? ""} placeholder="Temas, áreas de estudo, assuntos que fazem você parar para ler…"/><label htmlFor="excluded">O que você prefere evitar</label><textarea id="excluded" name="excluded" rows={3} maxLength={2000} defaultValue={profile?.excluded ?? ""} placeholder="Assuntos ou formatos que não merecem seu tempo."/><SubmitButton>Salvar interesses</SubmitButton></ActionForm></section><aside className="context-note"><Sparkles size={24}/><h3>Sem adivinhar quem você é.</h3><p>O Orbit só usa as preferências que você informar. Nenhum interesse vem preenchido por padrão.</p><p>Curtidas e cliques ajustam pesos de temas. Veja e edite esses sinais na página Meu perfil.</p></aside></div><section className="panel ai-panel" id="ia"><div className="section-heading"><div><h2>Sua conexão de IA</h2><p>URL e chave ficam só no servidor, fora da interface.</p></div><span className={`state-label ${ai.ready ? "success-text" : "warning-text"}`}><span className="dot"/>{ai.ready ? "Configurada" : ai.state === "invalid" ? "Configuração inválida" : "Aguardando configuração"}</span></div>{ai.ready && <dl className="detail-list"><div><dt>Protocolo</dt><dd>{ai.protocol === "openai" ? "OpenAI Compatible" : "Anthropic Compatible"}</dd></div><div><dt>Modelo</dt><dd>{ai.model}</dd></div></dl>}{ai.state === "invalid" && <p className="warning-text" role="alert">{ai.message}</p>}<p>No Docker, preencha <code>/config/orbit.env</code> no servidor; fora dele, copie <code>.env.example</code> para <code>.env</code>. URL, chave, modelos e limites de IA são relidos automaticamente; portas e outros parâmetros de inicialização exigem reiniciar o app.</p><div className="protocol-examples"><div><h3>OpenAI Compatible</h3><pre>{`AI_PROTOCOL=openai\nAI_BASE_URL=https://seu-endpoint.example/v1\nAI_API_KEY=sua-chave\nAI_MODEL=id-do-seu-modelo`}</pre></div><div><h3>Anthropic Compatible</h3><pre>{`AI_PROTOCOL=anthropic\nAI_BASE_URL=https://seu-endpoint.example\nAI_API_KEY=sua-chave\nAI_MODEL=id-do-seu-modelo`}</pre></div></div><p className="field-help">A URL precisa ter o prefixo exigido pelo serviço. Para Anthropic Messages, o SDK acrescenta /v1/messages. Modelos são definidos por você, sem troca automática de fornecedor.</p><h3>Modelo de briefing</h3><p className="field-help">{ai.briefingReady ? "Configuração do modelo de briefing carregada." : "Modelo de briefing ainda não configurado ou inválido."}</p><p className="field-help">Defina <code>AI_BRIEFING_MODEL</code> explicitamente para agrupar tópicos e gerar o briefing nas atualizações. O protocolo, a URL e a chave são os mesmos; não há escolha automática de outro serviço.</p><pre>{`AI_BRIEFING_MODEL=id-do-modelo-de-briefing\nAI_BRIEFING_INPUT_USD_PER_MILLION=\nAI_BRIEFING_OUTPUT_USD_PER_MILLION=`}</pre><p className="field-help">Se houver teto em USD, informe também os preços próprios do modelo de briefing. Ambos compartilham o mesmo orçamento diário.</p><div className="notice privacy-note"><LockKeyhole size={19}/><div><strong>Sua chave nunca aparece na interface.</strong><p>Somente títulos, descrições, autores e preferências necessários seguem para o endpoint escolhido. A política de privacidade é a desse fornecedor.</p></div></div><p className="field-help">Configure <code>AI_DAILY_TOKEN_LIMIT</code> para limitar o consumo. Para estimar USD, informe os preços por milhão de tokens no mesmo arquivo. Sem preços, custo é desconhecido, não zero. <a href="/status">Ver consumo e status <ArrowUpRight size={13}/></a></p></section><section className="panel schedule-panel"><h2>Coleta no seu ritmo</h2><p>Padrão: 08:00, 14:00 e 20:00 no fuso do servidor. Feeds pessoais também precisam do navegador com a extensão aberto.</p>{schedule.error && <p role="alert" className="warning-text">{schedule.error}</p>}<ActionForm action={saveSchedule} className="stack-form"><label className="checkbox-label"><input name="enabled" type="checkbox" defaultChecked={schedule.enabled}/>Agendamento ativo</label><label htmlFor="cron">Horários (cron)</label><input id="cron" name="expression" required maxLength={120} defaultValue={schedule.expression}/><label htmlFor="timezone">Fuso horário</label><input id="timezone" name="timezone" required maxLength={100} defaultValue={schedule.timezone}/><p className="field-help">Não há execução retroativa em lote quando o servidor esteve desligado. Intervalo mínimo global de cinco minutos, sem sobreposição. Limite atual: {schedule.maxRuns} execuções automáticas a cada 24 horas, configurável em COLLECTOR_MAX_RUNS_PER_DAY (1–12).</p><SubmitButton>Salvar agenda</SubmitButton></ActionForm></section><section className="panel access-panel"><h2>Acesso</h2><p>Sessões duram 30 dias. Para trocar a senha ou o autenticador, rode <code>npm run auth -- setup</code> no servidor; isso encerra todas as sessões.</p><div className="access-actions"><ActionForm action={logout}><SubmitButton className="button secondary">Sair deste dispositivo</SubmitButton></ActionForm><ActionForm action={logout}><input type="hidden" name="scope" value="all"/><SubmitButton className="button secondary">Sair de todos os dispositivos</SubmitButton></ActionForm></div></section></>;
+  const schedule = readSchedule(db);
+  const editionSchedule = readEditionSchedule(db);
+  const latestEdition = db.select({ id: editions.id }).from(editions).where(eq(editions.status, "published")).orderBy(desc(editions.id)).get();
+  return <>
+    <div className="page-heading"><div><h1>Configurações</h1><p>Agenda, notificações e conexões. Suas escolhas permanecem privadas.</p></div></div>
+    <section className="panel edition-schedule" id="edicoes">
+      <h2>Briefings gerais</h2>
+      <p>Dois fechamentos diários: <strong>08h e 16h</strong>. Panorama pela manhã; novidades desde 08h à tarde.</p>
+      <p>RSS públicos são coletados pelo servidor, sem extensão ou navegador aberto. <a href="/fontes#noticias">Escolher fontes públicas</a>.</p>
+      {editionSchedule.needsTimezone && <p className="warning-text">Nenhum fuso foi confirmado. Proposta: <strong>America/Sao_Paulo</strong>. Revise e ative a agenda abaixo.</p>}
+      {editionSchedule.error && <p role="alert" className="warning-text">{editionSchedule.error}</p>}
+      <ActionForm action={saveEditionSchedule} className="stack-form">
+        <label className="checkbox-label"><input name="enabled" type="checkbox" defaultChecked={editionSchedule.enabled}/>Edições gerais automáticas</label>
+        <label htmlFor="edition-timezone">Fuso das edições</label>
+        <input id="edition-timezone" name="timezone" required maxLength={100} defaultValue={editionSchedule.timezone}/>
+        <p className="field-help">Fuso atual: {editionSchedule.timezone}. Esta agenda é independente da coleta pessoal. Se o servidor voltar em até duas horas, recupera somente a edição recente. Não gera um lote de edições perdidas.</p>
+        <SubmitButton>Salvar agenda dos briefings</SubmitButton>
+      </ActionForm>
+      <p className="field-help">As edições compartilham o modelo de briefing e o orçamento de IA. Sem fontes recentes ou configuração válida, o arquivo mostra o motivo, sem notícias inventadas. <a href="/briefings">Consultar arquivo</a>.</p>
+    </section>
+    <PushSettings editionId={latestEdition?.id ?? null}/>
+    <section className="panel interests-panel">
+      <h2>Interesses pessoais</h2><p>Orientam as próximas análises do seu feed, não o briefing geral. Itens já classificados não serão reprocessados.</p>
+      <ActionForm action={saveProfile} className="stack-form">
+        <label htmlFor="interests">Seus interesses</label>
+        <textarea id="interests" name="interests" rows={4} required maxLength={2000} defaultValue={profile?.interests ?? ""} placeholder="Assuntos e áreas que você quer acompanhar"/>
+        <label htmlFor="excluded">O que você prefere evitar</label>
+        <textarea id="excluded" name="excluded" rows={3} maxLength={2000} defaultValue={profile?.excluded ?? ""}/>
+        <SubmitButton>Salvar interesses</SubmitButton>
+      </ActionForm>
+      <p className="field-help">Nenhuma preferência vem preenchida. <a href="/perfil#temas">Veja os temas e ajuste os pesos do feedback</a>.</p>
+    </section>
+    <section className="panel ai-panel" id="ia">
+      <div className="section-heading"><div><h2>Conexão de IA</h2><p>URL e chave ficam somente no servidor.</p></div><span className={`state-label ${ai.ready ? "success-text" : "warning-text"}`}><span className="dot"/>{ai.ready ? "Configurada" : ai.state === "invalid" ? "Configuração inválida" : "Aguardando configuração"}</span></div>
+      {ai.ready && <dl className="detail-list"><div><dt>Protocolo</dt><dd>{ai.protocol === "openai" ? "OpenAI Compatible" : "Anthropic Compatible"}</dd></div><div><dt>Modelo</dt><dd>{ai.model}</dd></div></dl>}
+      {ai.state === "invalid" && <p className="warning-text" role="alert">{ai.message}</p>}
+      <p>No Docker, preencha <code>/config/orbit.env</code>; fora dele, copie <code>.env.example</code> para <code>.env</code>. Parâmetros de IA são relidos automaticamente. Portas, contato de push e outros parâmetros de inicialização exigem reiniciar o app.</p>
+      <div className="protocol-examples"><div><h3>OpenAI Compatible</h3><pre>{`AI_PROTOCOL=openai\nAI_BASE_URL=https://seu-endpoint.example/v1\nAI_API_KEY=sua-chave\nAI_MODEL=id-do-seu-modelo`}</pre></div><div><h3>Anthropic Compatible</h3><pre>{`AI_PROTOCOL=anthropic\nAI_BASE_URL=https://seu-endpoint.example\nAI_API_KEY=sua-chave\nAI_MODEL=id-do-seu-modelo`}</pre></div></div>
+      <p className="field-help">A URL precisa ter o prefixo exigido pelo serviço. O SDK Anthropic acrescenta /v1/messages. Você define os modelos; não há troca automática de fornecedor.</p>
+      <h3>Modelo de briefing</h3>
+      <p className="field-help">{ai.briefingReady ? "Configuração do modelo de briefing carregada." : "Modelo de briefing ainda não configurado ou inválido."}</p>
+      <p>Defina <code>AI_BRIEFING_MODEL</code> para os briefings pessoal e geral. Ambos usam o protocolo, a URL e a chave escolhidos por você.</p>
+      <pre>{`AI_BRIEFING_MODEL=id-do-modelo-de-briefing\nAI_BRIEFING_INPUT_USD_PER_MILLION=\nAI_BRIEFING_OUTPUT_USD_PER_MILLION=`}</pre>
+      <p className="field-help">Com teto em USD, informe os preços próprios do modelo. Classificação e briefings compartilham o orçamento diário.</p>
+      <div className="notice privacy-note"><LockKeyhole size={19} aria-hidden="true"/><div><strong>Sua chave nunca aparece na interface.</strong><p>Somente os textos e metadados necessários seguem para o endpoint escolhido. Suas preferências pessoais não entram no briefing geral. A política de privacidade é a desse fornecedor.</p></div></div>
+      <p className="field-help">Configure <code>AI_DAILY_TOKEN_LIMIT</code> para limitar o consumo. Sem preços explícitos, custo é desconhecido, não zero. <a href="/status">Ver consumo e status <ArrowUpRight size={13} aria-hidden="true"/></a></p>
+    </section>
+    <section className="panel schedule-panel">
+      <h2>Coleta pessoal</h2><p>Padrão: 08h, 14h e 20h. Fuso desta agenda: {schedule.timezone}. Feeds pessoais precisam do navegador com a extensão aberto; RSS são coletados no servidor.</p>
+      {schedule.error && <p role="alert" className="warning-text">{schedule.error}</p>}
+      <ActionForm action={saveSchedule} className="stack-form">
+        <label className="checkbox-label"><input name="enabled" type="checkbox" defaultChecked={schedule.enabled}/>Agendamento de coleta ativo</label>
+        <label htmlFor="cron">Horários (cron)</label><input id="cron" name="expression" required maxLength={120} defaultValue={schedule.expression}/>
+        <label htmlFor="timezone">Fuso da coleta</label><input id="timezone" name="timezone" required maxLength={100} defaultValue={schedule.timezone}/>
+        <p className="field-help">Sem lote retroativo. Intervalo mínimo de cinco minutos, sem sobreposição. Limite: {schedule.maxRuns} coletas automáticas a cada 24 horas, configurável em COLLECTOR_MAX_RUNS_PER_DAY (1–12). Edições gerais têm sua própria agenda acima.</p>
+        <SubmitButton>Salvar agenda</SubmitButton>
+      </ActionForm>
+    </section>
+    <section className="panel access-panel"><h2>Acesso</h2><p>Sessões duram 30 dias. Para trocar a senha ou o autenticador, rode <code>npm run auth -- setup</code> no servidor; isso encerra todas as sessões.</p><div className="access-actions"><ActionForm action={logout}><SubmitButton className="button secondary">Sair deste dispositivo</SubmitButton></ActionForm><ActionForm action={logout}><input type="hidden" name="scope" value="all"/><SubmitButton className="button secondary">Sair de todos os dispositivos</SubmitButton></ActionForm></div></section>
+  </>;
 }

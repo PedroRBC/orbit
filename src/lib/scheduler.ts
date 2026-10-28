@@ -32,10 +32,10 @@ export function queueScheduledRun(db: OrbitDB, owner: string, now = new Date()):
     const slot = `${config.timezone}:${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
     const slots = Object.fromEntries(Object.entries(JSON.parse(getSetting(db, "scheduler_slots") || "{}") as Record<string, number>).filter(([, value]) => value > now.getTime() - 48 * 3600000));
     if (Object.hasOwn(slots, slot)) return null;
-    const recent = db.select({ count: sql<number>`count(*)` }).from(collectorRuns).where(and(isNull(collectorRuns.parentId), eq(collectorRuns.trigger, "scheduled"), gte(collectorRuns.startedAt, now.getTime() - 24 * 3600000))).get()?.count || 0;
+    const recent = db.select({ count: sql<number>`count(*)` }).from(collectorRuns).where(and(isNull(collectorRuns.parentId), eq(collectorRuns.kind, "collection"), eq(collectorRuns.trigger, "scheduled"), gte(collectorRuns.startedAt, now.getTime() - 24 * 3600000))).get()?.count || 0;
     if (recent >= config.maxRuns) return null;
-    if (db.select().from(collectorRuns).where(sql`${collectorRuns.parentId} IS NULL AND ${collectorRuns.status} IN ('queued','running')`).get()) return null;
-    const last = db.select().from(collectorRuns).where(isNull(collectorRuns.parentId)).orderBy(desc(collectorRuns.id)).get();
+    if (db.select().from(collectorRuns).where(sql`${collectorRuns.parentId} IS NULL AND ${collectorRuns.kind} = 'collection' AND ${collectorRuns.status} IN ('queued','running')`).get()) return null;
+    const last = db.select().from(collectorRuns).where(and(isNull(collectorRuns.parentId), eq(collectorRuns.kind, "collection"))).orderBy(desc(collectorRuns.id)).get();
     if (last?.finishedAt && now.getTime() - last.finishedAt < 300000) return null;
     const id = enqueueCollection(db);
     setSetting(db, "scheduler_slots", JSON.stringify({ ...slots, [slot]: now.getTime() }));

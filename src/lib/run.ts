@@ -8,6 +8,7 @@ import { classifyPending } from "../ai/classify";
 import { readAIEnvironment } from "./ai-environment";
 import { AIConfigurationError, getAIConfig, getBriefingConfig, type AIConfig } from "./config";
 import { generateBriefing } from "../ai/briefing";
+import { runEdition } from "../ai/edition";
 import { getProfile, saveRawItems, setSetting } from "./store";
 
 type RunControl = { assertActive?: () => void; signal?: AbortSignal };
@@ -23,6 +24,7 @@ export async function runWithConfiguredAI(db: OrbitDB, runId: number, collect?: 
   let briefingNotice: string | undefined;
   try { briefingConfig = env ? getBriefingConfig(env) : null; }
   catch { briefingNotice = "Configuração de briefing inválida. Confira modelo e preços próprios no .env (orbit.env no Docker)."; }
+  if (db.select().from(collectorRuns).where(eq(collectorRuns.id, runId)).get()?.kind === "edition") return runEdition(db, runId, briefingConfig, control);
   return runCollection(db, runId, { config, collect, configNotice, briefingConfig, briefingNotice, ...control });
 }
 

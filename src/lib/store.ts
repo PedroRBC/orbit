@@ -5,7 +5,7 @@ import type { RawItem } from "../collectors/youtube";
 
 export function enqueueCollection(db: OrbitDB): number {
   return db.transaction(() => {
-    const pending = db.select().from(collectorRuns).where(sql`${collectorRuns.parentId} IS NULL AND ${collectorRuns.status} IN ('queued', 'running')`).get();
+    const pending = db.select().from(collectorRuns).where(sql`${collectorRuns.parentId} IS NULL AND ${collectorRuns.kind} = 'collection' AND ${collectorRuns.status} IN ('queued', 'running')`).get();
     if (pending) return pending.id;
     return db.insert(collectorRuns).values({ status: "queued", startedAt: Date.now() }).returning().get().id;
   }, { behavior: "immediate" });
@@ -27,6 +27,8 @@ export function saveRawItems(db: OrbitDB, sourceId: number, items: RawItem[]): n
     const inserted = db.insert(rawItems).values({ ...item, id, sourceId, fetchedAt: Date.now() }).onConflictDoNothing().run().changes;
     const existingId = inserted ? id : db.select({ id: rawItems.id }).from(rawItems).where(eq(rawItems.id, id)).get()?.id || db.select({ id: rawItems.id }).from(rawItems).where(and(eq(rawItems.url, item.url), eq(rawItems.platform, item.platform))).get()?.id;
     if (!existingId) throw new Error("Não foi possível localizar o item deduplicado.");
+    // Revalidar publicação legada sem trocar conteúdo, data antiga ou a primeira publicação comprovada.
+    if (!inserted && item.platform === "news" && item.evidence === "news_rss" && item.newsPublishedAt != null) db.update(rawItems).set({ newsPublishedAt: item.newsPublishedAt }).where(and(eq(rawItems.id, existingId), isNull(rawItems.newsPublishedAt))).run();
     db.insert(sourceItems).values({ sourceId, rawId: existingId }).onConflictDoNothing().run();
     return count + inserted;
   }, 0));

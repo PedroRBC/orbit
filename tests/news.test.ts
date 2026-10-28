@@ -46,10 +46,17 @@ describe("RSS público sem SSRF", () => {
     await expect(fetchPublicXML("https://news.example.com/rss")).rejects.toThrow();
     expect(network.request).toHaveBeenCalledTimes(1);
   });
+  it("não transforma updated do Atom em data de publicação", async () => {
+    const atom = '<feed xmlns="http://www.w3.org/2005/Atom"><title>Fixture Atom</title><id>urn:fixture</id><updated>2026-10-28T10:00:00Z</updated><entry><id>urn:updated-only</id><title>Item sem publicação</title><link href="https://news.example.com/updated-only"/><updated>2026-10-28T10:00:00Z</updated></entry><entry><id>urn:old</id><title>Item antigo atualizado</title><link href="https://news.example.com/old"/><published>2026-10-01T10:00:00Z</published><updated>2026-10-28T10:00:00Z</updated></entry></feed>';
+    const items = await parseNewsFeed(atom, "Fixture");
+    expect(items[0]).toMatchObject({ publishedAt: null, newsPublishedAt: null });
+    expect(items[1]).toMatchObject({ publishedAt: Date.parse("2026-10-01T10:00:00Z"), newsPublishedAt: Date.parse("2026-10-01T10:00:00Z") });
+  });
   it("normaliza trechos/URLs e não baixa imagens ou artigos", async () => {
     const items = await parseNewsFeed(xml, "Portal de teste");
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ platform: "news", evidence: "news_rss", title: "Notícia sintética", text: "Resumo do editor, não artigo completo.", thumbnail: null, url: "https://news.example.com/article" });
+    expect(items[0].newsPublishedAt).toBe(Date.parse("2026-10-28T10:00:00Z"));
     expect(network.request).not.toHaveBeenCalled();
     await expect(parseNewsFeed('<!DOCTYPE rss [<!ENTITY x "y">]><rss/>', "Portal")).rejects.toThrow();
   });
