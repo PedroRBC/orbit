@@ -4,6 +4,10 @@ Curador pessoal de conteúdo, local e em português. **Cinco fases implementadas
 
 Não confunda o que seus feeds mostram com uma visão completa do mundo. O Orbit indica fontes e limites da análise.
 
+## Docker e TrueNAS
+
+O Orbit roda como um serviço em contêiner: interface, worker e migrações juntos, banco SQLite persistente e IA configurada fora da imagem. Instalação, volumes, backup, atualização e diagnóstico estão em [docs/deploy.md](docs/deploy.md).
+
 ## Rodar
 
 Requisitos: **Node.js 22.12+** (testado com 24), npm e, se não houver binário SQLite pronto, ferramentas de compilação nativas.

@@ -1,0 +1,23 @@
+# Somente código e lockfile entram no contexto. Segredos, bancos e perfis nunca.
+**/.env
+**/.env.*
+!.env.example
+**/*.db
+**/*.db-shm
+**/*.db-wal
+data/
+browser-profiles/
+node_modules/
+.next/
+browser-extension/dist/
+test-results/
+playwright-report/
+*.tsbuildinfo
+.git/
+.github/
+.impeccable/
+.superpowers/
+docs/
+tests/
+Dockerfile
+compose.yaml

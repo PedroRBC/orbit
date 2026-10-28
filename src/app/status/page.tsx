@@ -6,7 +6,7 @@ import { collectorRuns, processedItems, rawItems, sources } from "../../db/schem
 import { connectionStatus } from "../../lib/extension";
 import { readSchedule } from "../../lib/scheduler";
 import { aiStatus } from "../../lib/config";
-import { dailyUsage, getSetting } from "../../lib/store";
+import { dailyUsage, getSetting, workerOnline as isWorkerOnline } from "../../lib/store";
 import { CollectButton, WorkRefresh } from "../components";
 
 export const metadata = { title: "Status" };
@@ -24,7 +24,7 @@ export default async function StatusPage() {
   const budgetExhausted = tokensRemaining === 0 || (ai.costLimit !== null && dollarsRemaining === 0);
   const unknownCost = ai.costLimit !== null && usage.calls > 0 && usage.cost === null;
   const runs = db.select({ run: collectorRuns, source: sources.name }).from(collectorRuns).leftJoin(sources, eq(sources.id, collectorRuns.sourceId)).orderBy(desc(collectorRuns.id)).limit(30).all();
-  const workerOnline = Number(getSetting(db, "worker_heartbeat") || 0) > Date.now() - 30_000;
+  const workerOnline = isWorkerOnline(db);
   const pending = db.select({ count: sql<number>`count(*)` }).from(rawItems).leftJoin(processedItems, eq(rawItems.id, processedItems.rawId)).where(isNull(processedItems.rawId)).get()?.count ?? 0;
   const active = runs.some(({ run }) => ["queued", "running"].includes(run.status));
   const storedNotice = getSetting(db, "ai_notice"), storedBriefingNotice = getSetting(db, "briefing_notice");
