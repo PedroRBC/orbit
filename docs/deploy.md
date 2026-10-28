@@ -220,6 +220,14 @@ Use a versão ou o `sha-` no TrueNAS, nunca só `latest`. O `sha-` identifica ex
 
 O YAML deste guia aponta para o candidato `0.2.0-rc.2`, para o teste no NAS sem fazer merge do [PR #2](https://github.com/PedroRBC/orbit/pull/2). O [pacote é privado](https://github.com/users/PedroRBC/packages/container/package/orbit); acessar o link e baixar a imagem exigem autenticação.
 
+[Publicação verificada](https://github.com/PedroRBC/orbit/actions/runs/40696551059): `0.2.0-rc.2` e `sha-f56c736` apontam para o mesmo digest. Para fixar os bytes exatos, também pode usar:
+
+```text
+ghcr.io/pedrorbc/orbit@sha256:247766a60bf7b000e1fae051680cdc3c69ea449190ce24e38d9ed05fcb332c0c
+```
+
+Veja [o registro de validação](validation-self-hosted.md) para distinguir testes executados de verificações pendentes no NAS/celular.
+
 O CI verifica que o repositório e um pacote já existente são privados **antes** de publicar. Depois, consulta a API de pacotes para exigir `visibility: private` e confere que as tags de versão e SHA apontam para o digest publicado. A evidência aparece no resumo da [execução de publicação](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml). Se a consulta falhar, a execução falha em vez de declarar publicação verificada.
 
 ## Teste local (sem NAS)

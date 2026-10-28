@@ -72,8 +72,8 @@
 - [x] Aviso de desconexão; auditoria de toque/legibilidade em 390 px; fontes com "depende do navegador" e última coleta.
 
 ## F4 — CI, PR e documentação
-- [ ] Workflow: testes, typecheck, build, imagem `ghcr.io/pedrorbc/orbit:<versão>` e `sha-<curto>` em push na `main` ou tag `v*`; verificação de pacote privado e tags/digest no workflow.
-- [ ] Varredura de segredos/dados pessoais antes do push; PR; CLAUDE.md e README atualizados com links reais.
+- [x] Workflow: testes, typecheck, build, imagem `ghcr.io/pedrorbc/orbit:<versão>` e `sha-<curto>` em push na `main` ou tag `v*`; verificação de pacote privado e tags/digest no workflow.
+- [x] Varredura de segredos/dados pessoais antes do push; PR; CLAUDE.md e README atualizados com links reais.
 
 ## Evidências e pendências (28/10/2026)
 
@@ -81,4 +81,4 @@
 - Revisão independente encontrou vazamento RSC com cookie inventado, redirect com tab, bloqueio global, corpo sem limite, reuso do TOTP de setup e códigos de recuperação curtos. Corrigidos em `4ce91eff`; regressões incluídas.
 - CI do PR aprovado em https://github.com/PedroRBC/orbit/actions/runs/40694846180.
 - Instalação real no TrueNAS, proxy/domínio e Android/iPhone continuam pendentes do usuário; não alterar o NAS nem fazer merge.
-- F4 aguarda execução da publicação com checagem explícita de privacidade, versão/SHA e digest. O pacote privado exige credencial de leitura no TrueNAS, fornecida pelo usuário diretamente na interface do NAS.
+- F4 publicada e verificada: https://github.com/PedroRBC/orbit/actions/runs/40696551059. Pacote privado, tags `0.2.0-rc.2` e `sha-f56c736`, ambas em `sha256:247766a60bf7b000e1fae051680cdc3c69ea449190ce24e38d9ed05fcb332c0c`. Verificação pela API e registry dentro do workflow. Evidências detalhadas em docs/validation-self-hosted.md. O pacote privado exige credencial de leitura no TrueNAS, fornecida pelo usuário diretamente na interface do NAS.
