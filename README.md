@@ -211,13 +211,15 @@ E2E_PRODUCTION=1 npm run test:e2e
 
 Os testes não usam API paga: exercitam SDKs contra servidor HTTP local e SQLite real isolado. O e2e inicia app e worker com banco em `test-results/`. A coleta de um canal real depende de rede/YouTube e não é garantida por fixtures.
 
-Após `npm run build`, **`npm start`** inicia a versão de produção e o worker no mesmo comando.
+Após `npm run build`, **`npm start`** inicia a versão de produção e o worker no mesmo comando. No GitHub, o workflow `CI` roda essa mesma bateria em cada PR; a publicação da imagem está descrita em [docs/deploy.md](docs/deploy.md#imagem-no-ghcr).
 
 ## Estado da entrega
 
-As cinco fases foram implementadas, testadas incrementalmente e autorizadas em sequência. O novo login por extensão foi uma alteração aprovada para evitar o browser automatizado recusado pelo Google. Falta sua validação final com a extensão instalada no perfil real do Helium, seus canais/RSS/interesses e o endpoint de IA escolhido. Nenhum teste usou API paga.
+As cinco fases do app foram implementadas e testadas. Depois, o Orbit virou serviço próprio para Docker/TrueNAS (contêiner com dados persistentes, login com senha + TOTP, extensão conectada pela API e PWA instalável), entregue em fases no PR de implantação. Nenhum teste usou API paga nem o banco real.
 
-Não há seed de notícias fictícias em produção. Dados sintéticos aparecem somente em bancos isolados de teste. Resultados assistidos reais anteriores estão identificados no histórico; não são prova de que a extensão já foi instalada no seu navegador.
+Testado automaticamente: unitários, typecheck, build, e2e de produção (inclui extensão real pareada pela API), imagem Docker (saúde, worker, recriação sem perda, migração de banco antigo, reinício após queda, volume sem permissão) e fluxo completo atrás de um proxy HTTPS (Caddy). Pendente de validação sua: instalação no TrueNAS, seu proxy/domínio ou Tailscale, a extensão no seu Helium com permissão do endereço HTTPS, e a instalação do PWA no seu Android/iPhone.
+
+Não há seed de notícias fictícias em produção. Dados sintéticos aparecem somente em bancos isolados de teste.
 
 ## Aviso sobre automação
 

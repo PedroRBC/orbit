@@ -191,7 +191,7 @@ Mova os arquivos `-wal`/`-shm` antigos junto com o banco. Um WAL antigo ao lado 
 ## Atualização
 
 1. Faça um backup (item 1 acima).
-2. No YAML do app, troque a tag da imagem para a nova versão (`0.2.1`, ou `sha-<commit>` para fixar um build exato). Evite `latest`: dificulta saber o que está rodando e voltar atrás.
+2. No YAML do app, troque a tag da imagem para a nova versão (`0.2.1`, ou `sha-<commit curto>` para fixar um build exato). Evite `latest`: dificulta saber o que está rodando e voltar atrás.
 3. **Update/Save.** O TrueNAS recria o contêiner. O worker antigo libera o lease ao receber SIGTERM, e o novo aplica as migrações pendentes uma única vez antes de iniciar interface e worker.
 
 Uma coleta em andamento durante a atualização é marcada como interrompida e repetida pelo novo worker, sem duplicar itens. Se o processo morrer sem SIGTERM, o novo worker espera até 60 s o lease antigo vencer.
@@ -205,6 +205,17 @@ As migrações só andam para frente. Voltar a imagem depois que uma versão nov
 3. Volte a tag anterior.
 
 O que foi coletado depois da atualização se perde nessa volta.
+
+## Imagem no GHCR
+
+O workflow `.github/workflows/ci.yml` roda testes, typecheck, build e e2e em todo PR e push. A imagem só é publicada (privada, `linux/amd64`) em dois casos:
+
+| Evento | Tags publicadas |
+| --- | --- |
+| Push em `main` (após merge) | `<versão do package.json>`, `sha-<commit curto>`, `latest` |
+| Tag `v*` empurrada (ex.: `v0.2.0-rc.1`) | `<versão da tag>` (ex.: `0.2.0-rc.1`), `sha-<commit curto>` |
+
+Use a versão ou o `sha-` no TrueNAS, nunca só `latest`. O `sha-` identifica exatamente o commit; a imagem também traz os labels `org.opencontainers.image.version` e `.revision`.
 
 ## Teste local (sem NAS)
 

@@ -15,6 +15,7 @@ Alteração aprovada em 27/10/2026: o endpoint de IA aceita protocolo OpenAI Com
 - `npm run auth -- setup|logout-all|status`: senha + TOTP + códigos de recuperação (terminal, sem log). No Docker: `docker exec -it <contêiner> npm run auth -- setup`.
 - `npm run db:backup [dir]`: backup online verificado (arquivo único, sem -wal).
 - Docker: `docker compose up -d --build` (volumes nomeados); guia TrueNAS em docs/deploy.md.
+- CI (`.github/workflows/ci.yml`): testes, typecheck, build e e2e em PR/push; imagem privada `ghcr.io/pedrorbc/orbit` só em push na main (`<versão>`, `sha-<curto>`, `latest`) ou tag `v*` (semver + `sha-`). Empurrar tag = publicar: exige confirmação do usuário.
 - `npm run build` e `npm start`: produção local com worker no mesmo comando.
 - `npm test`: Vitest, SQLite em memória e endpoints HTTP locais, sem API paga.
 - `npm run test:e2e`: Chromium, app/worker reais e banco isolado em test-results.
