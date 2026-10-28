@@ -49,7 +49,7 @@ A chave fica só nesse arquivo. Não a coloque no YAML: variáveis do Compose ap
 ```yaml
 services:
   orbit:
-    image: ghcr.io/pedrorbc/orbit:0.2.0
+    image: ghcr.io/pedrorbc/orbit:0.2.0-rc.2
     init: true
     restart: unless-stopped
     stop_grace_period: 30s
@@ -217,6 +217,10 @@ O workflow `.github/workflows/ci.yml` roda testes, typecheck, build e e2e em tod
 | Tag `v*` empurrada (ex.: `v0.2.0-rc.1`) | `<versão da tag>` (ex.: `0.2.0-rc.1`), `sha-<commit curto>` |
 
 Use a versão ou o `sha-` no TrueNAS, nunca só `latest`. O `sha-` identifica exatamente o commit; a imagem também traz os labels `org.opencontainers.image.version` e `.revision`.
+
+O YAML deste guia aponta para o candidato `0.2.0-rc.2`, para o teste no NAS sem fazer merge do [PR #2](https://github.com/PedroRBC/orbit/pull/2). O [pacote é privado](https://github.com/users/PedroRBC/packages/container/package/orbit); acessar o link e baixar a imagem exigem autenticação.
+
+O CI verifica que o repositório e um pacote já existente são privados **antes** de publicar. Depois, consulta a API de pacotes para exigir `visibility: private` e confere que as tags de versão e SHA apontam para o digest publicado. A evidência aparece no resumo da [execução de publicação](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml). Se a consulta falhar, a execução falha em vez de declarar publicação verificada.
 
 ## Teste local (sem NAS)
 

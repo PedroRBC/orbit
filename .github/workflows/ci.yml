@@ -44,7 +44,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then version=${GITHUB_REF_NAME#v}; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
@@ -61,7 +64,21 @@ jobs:
             type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable={{is_default_branch}}
-      - uses: docker/build-push-action@v7
+      - name: Check private publication destination
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = true
+          status=$(curl --silent --show-error --output /tmp/orbit-package.json --write-out '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/users/PedroRBC/packages/container/orbit")
+          case "$status" in
+            200) jq -e '.visibility == "private"' /tmp/orbit-package.json ;;
+            404) echo 'New package: GHCR creates private packages by default.' ;;
+            *) echo "Cannot verify GHCR destination (HTTP $status)."; exit 1 ;;
+          esac
+      - id: publish
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64
@@ -73,3 +90,28 @@ jobs:
             REVISION=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Verify private package and published tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          package=users/PedroRBC/packages/container/orbit
+          gh api "$package" --jq .visibility | grep -Fx private
+          gh api "$package/versions" --paginate \
+            | jq -sr --arg digest "$DIGEST" \
+              '[.[][] | select(.name == $digest) | .metadata.container.tags[]] | unique[]' \
+            > /tmp/orbit-tags.txt
+          while IFS= read -r image; do
+            grep -Fx "${image##*:}" /tmp/orbit-tags.txt
+            docker buildx imagetools inspect "$image" --format '{{json .Manifest}}' \
+              | jq -e --arg digest "$DIGEST" '.digest == $digest'
+          done <<< "$IMAGE_TAGS"
+          {
+            echo '## Verified private Orbit image'
+            echo "Digest: \`$DIGEST\`"
+            echo '```'
+            echo "$IMAGE_TAGS"
+            echo '```'
+            echo 'Visibility: private (GitHub Packages API).'
+          } >> "$GITHUB_STEP_SUMMARY"
