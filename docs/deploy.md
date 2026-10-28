@@ -224,13 +224,14 @@ O workflow `.github/workflows/ci.yml` roda testes, typecheck, build e e2e em PRs
 | Evento | Tags publicadas |
 | --- | --- |
 | Push em `main` (após merge) | `<versão do package.json>`, `sha-<commit curto>`, `latest` |
-| Tag `v*` empurrada (ex.: `v0.2.0-rc.1`) | `<versão da tag>` (ex.: `0.2.0-rc.1`), `sha-<commit curto>` |
+| Tag `v*` estável empurrada (ex.: `v0.2.1`) | `<versão da tag>`, `sha-<commit curto>`, `latest` |
+| Tag `v*` de candidato (ex.: `v0.2.0-rc.1`) | `<versão da tag>` (ex.: `0.2.0-rc.1`), `sha-<commit curto>` |
 
 Use a versão ou o `sha-` no TrueNAS, nunca só `latest`. O `sha-` identifica exatamente o commit; a imagem também traz os labels `org.opencontainers.image.version` e `.revision`.
 
 O YAML deste guia fixa `0.2.1`. O [pacote é privado](https://github.com/users/PedroRBC/packages/container/package/orbit); acessar o link e baixar a imagem exigem autenticação. A CI da tag precisa concluir antes de instalar.
 
-O lançamento por `v0.2.1` publica `ghcr.io/pedrorbc/orbit:0.2.1` e `:sha-<commit curto>`, sem alterar a main ou `latest`. O workflow desativa a promoção automática de semver para `latest`; somente o push na main publica essa tag. Para uma atualização controlada no NAS, mantenha a versão fixa ou copie o digest do resumo da [publicação aprovada](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml):
+Todo lançamento estável por tag (ex.: `v0.2.1`) publica `ghcr.io/pedrorbc/orbit:<versão>`, `:sha-<commit curto>` e move `latest` para ele; candidatos com `-` (ex.: `-rc.1`) nunca recebem `latest`. Push na main também move `latest`. Para uma atualização controlada no NAS, mantenha a versão fixa ou copie o digest do resumo da [publicação aprovada](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml):
 
 ```text
 ghcr.io/pedrorbc/orbit@sha256:<digest publicado>
