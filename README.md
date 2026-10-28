@@ -4,7 +4,11 @@ Curador pessoal de conteúdo, local e em português. **Cinco fases implementadas
 
 Não confunda o que seus feeds mostram com uma visão completa do mundo. O Orbit indica fontes e limites da análise.
 
-## Versão 0.2.1 — evolução editorial
+## Versão 0.2.2 — CliProxyApi por HTTP
+
+`AI_BASE_URL` agora aceita HTTP fora de localhost, inclusive IP da LAN e hostname de serviço Docker, sem flag adicional. Isso permite usar o CliProxyApi na rede do NAS. HTTP envia chave e textos sem criptografia: use apenas em rede confiável. Login, RSS e Web Push não mudam. A tag `v0.2.2` publica `0.2.2` e `latest` no GHCR privado, após CI aprovada, sem alterar o NAS ou fazer merge na main.
+
+## Evolução editorial desde 0.2.1
 
 Esta versão acrescenta apresentação editorial, oito temas controlados, **briefings gerais às 08h/16h** e **Web Push na PWA**. O serviço continua privado, com login e um único usuário. A publicação usa a tag `v0.2.1` e o destino privado existente; a imagem só deve ser considerada disponível após a CI concluir testes e verificações de privacidade/tags/digest. Nenhuma alteração no NAS faz parte desta publicação.
 
@@ -20,7 +24,7 @@ Em **Configurações → Briefings gerais**, confirme o fuso e ative os horário
 O Orbit roda como um serviço em contêiner: interface, worker e migrações juntos, banco SQLite persistente e IA configurada fora da imagem. Pelo endereço HTTPS, ele pode ser instalado no celular como app (PWA). Instalação, volumes, acesso remoto, login, extensão, PWA no Android/iPhone, backup, atualização e diagnóstico estão em [docs/deploy.md](docs/deploy.md).
 
 - [PR de implantação #2](https://github.com/PedroRBC/orbit/pull/2).
-- [Pacote privado no GHCR](https://github.com/users/PedroRBC/packages/container/package/orbit): versão desta entrega `ghcr.io/pedrorbc/orbit:0.2.1`, publicada pela tag após CI aprovada, junto de `:sha-<commit curto>`. `:latest` acompanha somente a main, que não é alterada por este lançamento.
+- [Pacote privado no GHCR](https://github.com/users/PedroRBC/packages/container/package/orbit): versão desta entrega `ghcr.io/pedrorbc/orbit:0.2.2`, publicada pela tag após CI aprovada, junto de `:sha-<commit curto>` e `:latest`. `latest` acompanha a main e tags estáveis; candidatos nunca. Este lançamento não faz merge na main.
 - [Publicações da main](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml?query=branch%3Amain): cada execução confere privacidade, tags e digest; consulte a última publicação aprovada antes de instalar ou atualizar.
 - [Registro de validação](docs/validation-self-hosted.md): testes executados e pendências no NAS/celular, incluindo a [publicação anterior do candidato](https://github.com/PedroRBC/orbit/actions/runs/40696551059).
 
@@ -151,7 +155,7 @@ O SDK acrescenta `/v1/messages`. Inclui Bearer do SDK atual e `x-api-key` para p
 
 Para API oficial Anthropic, a raiz é `https://api.anthropic.com`. Identificadores atuais verificados na [documentação oficial](https://platform.claude.com/docs/en/models/overview): `claude-haiku-5-5` para classificação e `claude-sonnet-5-5` para o briefing. Em endpoints compatíveis, use os IDs oferecidos pelo próprio fornecedor. Não existe modelo padrão escondido.
 
-Endpoints remotos exigem HTTPS. Para um servidor de inferência no próprio computador, HTTP em `localhost`, `127.0.0.1` ou `[::1]` é permitido. Redirecionamentos são recusados para não propagar credenciais. Os adaptadores removem cabeçalhos herdados do ambiente dos SDKs e usam somente a chave do Orbit; o timeout de 45 segundos também cobre a leitura do corpo.
+`AI_BASE_URL` aceita HTTP e HTTPS, inclusive IP da rede local e nome de serviço Docker, sem flag adicional. Por exemplo, no CliProxyApi OpenAI Compatible: `AI_BASE_URL=http://192.168.1.3:8317/v1` (substitua pelo endereço alcançável a partir do contêiner). `localhost` dentro do contêiner é o próprio Orbit, não o NAS nem outro app. **HTTP envia chave e textos sem criptografia: use apenas em rede confiável; prefira HTTPS fora dela.** Credenciais, query e fragmento na URL continuam proibidos. Redirecionamentos são recusados para não propagar credenciais. Os adaptadores removem cabeçalhos herdados do ambiente dos SDKs e usam somente a chave do Orbit; o timeout de 45 segundos também cobre a leitura do corpo.
 
 **Privacidade:** preferências, títulos, descrições e autores seguem para o endpoint escolhido. A retenção depende desse fornecedor. O app não tem analytics próprios, carregamento de fontes tipográficas externas ou publicação de dados. Thumbnails são URLs, carregadas diretamente pelo navegador com referrer desativado; isso ainda faz uma requisição ao servidor da imagem.
 

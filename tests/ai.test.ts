@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { createServer, type Server } from "node:http";
-import { getAIConfig } from "../src/lib/config";
+import { getAIConfig, getBriefingConfig } from "../src/lib/config";
 import { requestClassification } from "../src/ai/provider";
 import { validateClassification } from "../src/ai/classify";
 import { THEME_IDS } from "../src/lib/taxonomy";
@@ -26,10 +26,26 @@ async function endpoint(protocol: "openai" | "anthropic") {
 }
 
 describe("configuração e protocolos", () => {
-  it("não habilita IA sem URL, chave e modelo e rejeita credenciais em URL", () => {
+  it("não habilita IA sem URL, chave e modelo", () => {
     expect(getAIConfig({})).toBeNull();
-    expect(() => getAIConfig({ AI_BASE_URL: "https://user:pass@example.com", AI_API_KEY: "secret", AI_MODEL: "model" })).toThrow();
-    expect(() => getAIConfig({ AI_BASE_URL: "http://example.com", AI_API_KEY: "secret", AI_MODEL: "model" })).toThrow();
+  });
+  it.each([
+    "http://192.168.1.3:8317/v1", "http://10.0.0.3:8317/v1", "http://172.17.0.1:8317/v1",
+    "http://[fd00::3]:8317/v1", "http://cliproxyapi:8317/v1", "http://proxy.lan:8317/v1",
+    "http://example.com/v1", "https://example.com/v1",
+  ])("aceita o endpoint configurado %s para classificação e briefing", baseURL => {
+    for (const protocol of ["openai", "anthropic"]) {
+      const env = { AI_PROTOCOL: protocol, AI_BASE_URL: baseURL, AI_API_KEY: "test-key", AI_MODEL: "custom-model", AI_BRIEFING_MODEL: "briefing-model" };
+      expect(getAIConfig(env)).toMatchObject({ protocol, baseURL, model: "custom-model" });
+      expect(getBriefingConfig(env)).toMatchObject({ protocol, baseURL, model: "briefing-model" });
+    }
+  });
+  it.each([
+    "https://user:pass@example.com", "http://user:pass@192.168.1.3:8317/v1",
+    "http://proxy.lan/v1?key=secret", "https://example.com/v1#fragment",
+    "ftp://proxy.lan/v1", "file:///tmp/model", "not-a-url",
+  ])("rejeita protocolo inválido, credenciais, query ou fragmento: %s", baseURL => {
+    expect(() => getAIConfig({ AI_BASE_URL: baseURL, AI_API_KEY: "secret", AI_MODEL: "model" })).toThrow();
   });
   for (const protocol of ["openai", "anthropic"] as const) {
     it(`usa endpoint/modelo/chave customizados no protocolo ${protocol}`, async () => {
@@ -44,6 +60,17 @@ describe("configuração e protocolos", () => {
       expect(local.requests[0].key).toBe(protocol === "openai" ? "Bearer test-key" : "test-key");
       expect(local.requests[0].auth).toBe("Bearer test-key");
       expect(local.requests[0].inherited).toBeUndefined();
+    });
+    it(`não segue redirecionamentos HTTP nem encaminha a chave no protocolo ${protocol}`, async () => {
+      const target = await endpoint(protocol);
+      const redirect = createServer((_req, res) => { res.writeHead(307, { Location: target.url }); res.end(); });
+      servers.push(redirect);
+      await new Promise<void>(resolve => redirect.listen(0, "127.0.0.1", resolve));
+      const address = redirect.address();
+      if (!address || typeof address === "string") throw new Error("Sem porta");
+      const config = getAIConfig({ AI_PROTOCOL: protocol, AI_BASE_URL: `http://127.0.0.1:${address.port}`, AI_API_KEY: "test-key", AI_MODEL: "custom-model" })!;
+      await expect(requestClassification(config, "JSON", "dados")).rejects.toThrow();
+      expect(target.requests).toEqual([]);
     });
   }
   it("cancela a leitura do corpo Anthropic quando o sinal expira", async () => {

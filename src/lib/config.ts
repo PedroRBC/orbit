@@ -24,9 +24,8 @@ export function getAIConfig(env: Record<string, string | undefined> = readAIEnvi
   if (!env.AI_BASE_URL?.trim() || !env.AI_API_KEY?.trim() || !env.AI_MODEL?.trim()) return null;
   let url: URL;
   try { url = new URL(env.AI_BASE_URL.trim()); } catch { throw new AIConfigurationError("AI_BASE_URL deve ser uma URL válida."); }
-  const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-  if (url.username || url.password || url.search || url.hash || (url.protocol !== "https:" && !(url.protocol === "http:" && local))) {
-    throw new AIConfigurationError("AI_BASE_URL precisa usar HTTPS. HTTP só é permitido em localhost; um IP privado não é localhost. Credenciais, query e fragmento na URL não são aceitos.");
+  if (url.username || url.password || url.search || url.hash || !["https:", "http:"].includes(url.protocol)) {
+    throw new AIConfigurationError("AI_BASE_URL precisa usar HTTP ou HTTPS, sem credenciais, query ou fragmento na URL.");
   }
   const protocol = z.enum(["openai", "anthropic"]).parse(env.AI_PROTOCOL || "openai");
   const dailyTokenLimit = z.number().int().positive().parse(number(env.AI_DAILY_TOKEN_LIMIT, 50_000));

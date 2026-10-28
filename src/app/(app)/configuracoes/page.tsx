@@ -57,7 +57,7 @@ export default async function SettingsPage() {
       {ai.state === "invalid" && <p className="warning-text" role="alert">{ai.message}</p>}
       <p>No Docker, preencha <code>/config/orbit.env</code>; fora dele, copie <code>.env.example</code> para <code>.env</code>. Parâmetros de IA são relidos automaticamente. Portas, contato de push e outros parâmetros de inicialização exigem reiniciar o app.</p>
       <div className="protocol-examples"><div><h3>OpenAI Compatible</h3><pre>{`AI_PROTOCOL=openai\nAI_BASE_URL=https://seu-endpoint.example/v1\nAI_API_KEY=sua-chave\nAI_MODEL=id-do-seu-modelo`}</pre></div><div><h3>Anthropic Compatible</h3><pre>{`AI_PROTOCOL=anthropic\nAI_BASE_URL=https://seu-endpoint.example\nAI_API_KEY=sua-chave\nAI_MODEL=id-do-seu-modelo`}</pre></div></div>
-      <p className="field-help">A URL precisa ter o prefixo exigido pelo serviço. O SDK Anthropic acrescenta /v1/messages. Você define os modelos; não há troca automática de fornecedor.</p>
+      <p className="field-help">A URL aceita HTTP ou HTTPS, inclusive IP da rede local ou nome do serviço Docker. HTTP envia chave e textos sem criptografia: use apenas em rede confiável. Inclua o prefixo exigido pelo serviço; o SDK Anthropic acrescenta /v1/messages. Você define os modelos; não há troca automática de fornecedor.</p>
       <h3>Modelo de briefing</h3>
       <p className="field-help">{ai.briefingReady ? "Configuração do modelo de briefing carregada." : "Modelo de briefing ainda não configurado ou inválido."}</p>
       <p>Defina <code>AI_BRIEFING_MODEL</code> para os briefings pessoal e geral. Ambos usam o protocolo, a URL e a chave escolhidos por você.</p>

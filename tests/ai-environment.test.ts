@@ -18,12 +18,11 @@ it("relê a configuração de IA do arquivo sem usar a cópia antiga herdada pel
   writeFileSync(file, 'AI_PROTOCOL=openai\n');
   expect(getAIConfig()).toBeNull();
 });
-it("explica HTTP privado bloqueado em vez de afirmar que a IA está desligada", () => {
+it("carrega o CliProxyApi por HTTP na rede do NAS sem expor a chave no status", () => {
   vi.stubEnv("ORBIT_ENV_FILE", "");
   vi.stubEnv("AI_PROTOCOL", "openai"); vi.stubEnv("AI_BASE_URL", "http://192.168.1.3:8317/v1");
   vi.stubEnv("AI_API_KEY", "test-only-key"); vi.stubEnv("AI_MODEL", "custom-model");
   const status = aiStatus();
-  expect(status).toMatchObject({ ready: false, state: "invalid" });
-  expect(status.message).toContain("HTTPS");
-  expect(status.message).not.toContain("test-only-key");
+  expect(status).toMatchObject({ ready: true, state: "ready", protocol: "openai", model: "custom-model" });
+  expect(JSON.stringify(status)).not.toContain("test-only-key");
 });

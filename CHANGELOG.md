@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2 — 2026-10-28
+
+- Corrigido o bloqueio de `AI_BASE_URL` por HTTP fora de localhost: CliProxyApi e outros endpoints configurados no servidor aceitam IP da LAN, hostname e nome de serviço Docker, nos dois protocolos, para classificação e briefings. Nenhuma flag adicional é necessária.
+- Credenciais, query e fragmento na URL continuam recusados; redirecionamentos não são seguidos. Login, companion, RSS públicos e Web Push mantêm suas proteções atuais.
+- HTTP transporta chave e textos sem criptografia; use somente em rede confiável e prefira HTTPS fora dela.
+- Versão, lockfile, Compose e guia alinhados em `0.2.2`. A tag estável `v0.2.2` publica `0.2.2`, `sha-<commit>` e `latest` no GHCR privado existente, sem merge na main ou alteração no NAS.
+- Teste de release atualizado para a política vigente: main e tags estáveis promovem `latest`; candidatos nunca. Sem migração de banco ou alteração da extensão nesta versão.
+
 ## 0.2.1 — 2026-10-28
 
 ### Adicionado

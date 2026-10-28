@@ -4,7 +4,11 @@ Um contêiner roda a interface, o worker e as migrações. O banco SQLite (modo 
 
 O acesso é sempre protegido por senha e código TOTP. Fora de `localhost`, o login só acontece por HTTPS, através de um proxy reverso escolhido por você.
 
-## Evolução editorial na versão 0.2.1
+## Correção de conexão na versão 0.2.2
+
+`AI_BASE_URL` aceita HTTP e HTTPS, inclusive IP da LAN ou nome de serviço Docker, sem flag adicional. A tag estável `v0.2.2` publica `0.2.2` e `latest` no destino privado existente, após a CI concluir. Esta correção não altera banco, extensão nem a exigência de HTTPS para login. Instalar/atualizar o app no NAS continua sendo uma ação separada.
+
+## Evolução editorial desde a versão 0.2.1
 
 A versão `0.2.1` inclui temas controlados, briefings gerais 08h/16h e Web Push. A publicação foi autorizada pelo usuário para o destino privado existente; considere a imagem disponível somente depois da CI da tag `v0.2.1` concluir todas as verificações. A imagem anterior `0.2.0` não contém esses recursos. Instalação e alterações no TrueNAS continuam exigindo autorização própria.
 
@@ -52,6 +56,8 @@ Edite `/mnt/Configs/Apps/orbit/config/orbit.env` no Shell do TrueNAS (`nano`). S
 
 A chave fica só nesse arquivo. Não a coloque no YAML: variáveis do Compose aparecem em `docker inspect` e na tela do app no TrueNAS. Com o arquivo vazio, o app abre e coleta, mas não analisa.
 
+Para CliProxyApi OpenAI Compatible na rede do NAS, configure `AI_PROTOCOL=openai` e `AI_BASE_URL=http://192.168.1.3:8317/v1`, substituindo IP/porta pelo endereço real alcançável a partir do contêiner. Numa rede Docker compartilhada, o nome do serviço também funciona (ex.: `http://cliproxyapi:8317/v1`). Não exige flag extra. `localhost` dentro do contêiner aponta para o próprio Orbit, não para o NAS ou outro app. **HTTP envia chave e textos sem criptografia: use somente em rede confiável; prefira HTTPS fora dela.** Não inclua credenciais, query ou fragmento na URL; redirects continuam recusados. A interface/login e a extensão continuam exigindo HTTPS fora de localhost.
+
 ### 3. App personalizado
 
 **Apps → Discover Apps → ⋮ → Install via YAML**, nome `orbit`:
@@ -59,7 +65,7 @@ A chave fica só nesse arquivo. Não a coloque no YAML: variáveis do Compose ap
 ```yaml
 services:
   orbit:
-    image: ghcr.io/pedrorbc/orbit:0.2.1
+    image: ghcr.io/pedrorbc/orbit:0.2.2
     init: true
     restart: unless-stopped
     stop_grace_period: 30s
@@ -202,7 +208,7 @@ Mova os arquivos `-wal`/`-shm` antigos junto com o banco. Um WAL antigo ao lado 
 ## Atualização
 
 1. Faça um backup (item 1 acima).
-2. No YAML do app, troque a tag da imagem para a nova versão (`0.2.1`, ou `sha-<commit curto>` para fixar um build exato). Evite `latest`: dificulta saber o que está rodando e voltar atrás.
+2. No YAML do app, troque a tag da imagem para a nova versão (`0.2.2`, ou `sha-<commit curto>` para fixar um build exato). Evite `latest`: dificulta saber o que está rodando e voltar atrás.
 3. **Update/Save.** O TrueNAS recria o contêiner. O worker antigo libera o lease ao receber SIGTERM, e o novo aplica as migrações pendentes uma única vez antes de iniciar interface e worker.
 
 Uma coleta em andamento durante a atualização é marcada como interrompida e repetida pelo novo worker, sem duplicar itens. Se o processo morrer sem SIGTERM, o novo worker espera até 60 s o lease antigo vencer.
@@ -229,7 +235,7 @@ O workflow `.github/workflows/ci.yml` roda testes, typecheck, build e e2e em PRs
 
 Use a versão ou o `sha-` no TrueNAS, nunca só `latest`. O `sha-` identifica exatamente o commit; a imagem também traz os labels `org.opencontainers.image.version` e `.revision`.
 
-O YAML deste guia fixa `0.2.1`. O [pacote é privado](https://github.com/users/PedroRBC/packages/container/package/orbit); acessar o link e baixar a imagem exigem autenticação. A CI da tag precisa concluir antes de instalar.
+O YAML deste guia fixa `0.2.2`. O [pacote é privado](https://github.com/users/PedroRBC/packages/container/package/orbit); acessar o link e baixar a imagem exigem autenticação. A CI da tag precisa concluir antes de instalar.
 
 Todo lançamento estável por tag (ex.: `v0.2.1`) publica `ghcr.io/pedrorbc/orbit:<versão>`, `:sha-<commit curto>` e move `latest` para ele; candidatos com `-` (ex.: `-rc.1`) nunca recebem `latest`. Push na main também move `latest`. Para uma atualização controlada no NAS, mantenha a versão fixa ou copie o digest do resumo da [publicação aprovada](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml):
 
