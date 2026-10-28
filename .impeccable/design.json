@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-28",
+  "title": "Design System: Orbit",
+  "extensions": {
+    "breakpoints": [{ "name": "mobile", "value": "760px" }, { "name": "compact", "value": "1100px" }],
+    "motion": [{ "name": "control-hover", "value": "background-color 0.15s ease-out", "purpose": "Estado de controles, removido em reduced motion." }],
+    "shadows": []
+  },
+  "components": [],
+  "narrative": {
+    "northStar": "Curadoria pessoal transparente",
+    "overview": "Interface de operação, escura e legível. Fontes e motivos acompanham as recomendações; configuração vazia nunca é preenchida com dados inventados.",
+    "keyCharacteristics": ["Navegação familiar", "Hierarquia legível", "Estados explícitos", "Sem fontes externas de tipografia"],
+    "rules": [],
+    "dos": ["Identificar fonte e limitação da análise.", "Manter labels, foco e contraste de campos."],
+    "donts": ["Não esconder conteúdo atrás de animações.", "Não mostrar métricas ou recomendações inventadas."]
+  }
+}
