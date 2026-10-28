@@ -8,13 +8,9 @@ import { readSchedule } from "../../../lib/scheduler";
 import { aiStatus } from "../../../lib/config";
 import { dailyUsage, getSetting, workerOnline as isWorkerOnline } from "../../../lib/store";
 import { CollectButton, WorkRefresh } from "../../components";
+import { runLabels as labels } from "../../../lib/run-labels";
 
 export const metadata = { title: "Status" };
-const labels: Record<string, string> = {
-  queued: "Na fila", running: "Em andamento", completed: "Concluída", partial: "Parcial", error: "Falhou",
-  login_required: "Login necessário", verification_required: "Verificação necessária", layout_changed: "Revisar fonte/layout",
-  profile_in_use: "Perfil ocupado", browser_unavailable: "Navegador indisponível", rate_limited: "Aguardando Retry-After", unsafe_source: "RSS bloqueado por segurança", source_timeout: "Consulta excedeu o prazo", source_http_error: "Falha HTTP/rede", navigation_failed: "Falha ao abrir feed", script_injection_failed: "Leitor sem acesso à página", capture_timeout: "Prazo de captura excedido", user_interrupted: "Interrompida ao assumir a aba",
-};
 export default async function StatusPage() {
   await connection();
   const db = getDatabase(), ai = aiStatus(), extension = connectionStatus(db), usage = dailyUsage(db), schedule = readSchedule(db);
@@ -33,7 +29,7 @@ export default async function StatusPage() {
   return <>
     <WorkRefresh active={active || !workerOnline}/>
     <div className="page-heading"><div><h1>Tudo às claras.</h1><p>O que está funcionando, o que chegou e o que precisa de você.</p></div><CollectButton/></div>
-    <section className="panel"><h2>Operação local</h2><dl className="detail-list">
+    <section className="panel"><h2>Operação</h2><dl className="detail-list">
       <div><dt>Worker</dt><dd className={workerOnline ? "success-text" : "warning-text"}><span className="dot"/>{workerOnline ? "Online" : "Sem sinal recente"}</dd></div>
       <div><dt>Navegador habitual</dt><dd><a className="text-link" href="/conectar">{extension.online ? "Extensão online" : extension.paired ? "Abra o navegador com a extensão" : "Conectar extensão"}</a></dd></div>
       <div><dt>IA</dt><dd>{ai.message}</dd></div>

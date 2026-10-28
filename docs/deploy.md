@@ -119,6 +119,15 @@ Rede, DNS, certificados e roteador ficam por sua conta.
 - A porta 30480 não precisa estar aberta na internet: só o proxy precisa alcançá-la. Se o proxy roda no próprio NAS, você pode publicar só em loopback (`"127.0.0.1:30480:3000"`) quando o proxy usar rede do host.
 - Seguidos erros de senha/código bloqueiam novas tentativas por 15 minutos (5 por cliente, 20 no total). O proxy deve enviar `X-Forwarded-For` para o limite por cliente funcionar; o limite total vale sempre.
 
+## App no celular (PWA)
+
+O Orbit pode ser instalado na tela inicial e abre em tela cheia, sem barra do navegador. Requisito: abrir pelo endereço **HTTPS** (certificado válido); por HTTP ou com certificado inválido o navegador não oferece a instalação.
+
+- **Android (Chrome):** abra o endereço, entre com senha e código, toque em **⋮ → Instalar app** (ou **Adicionar à tela inicial**) e confirme.
+- **iPhone/iPad (Safari):** abra o endereço, entre, toque em **Compartilhar → Adicionar à Tela de Início** e confirme o nome "Orbit". No iOS o app instalado tem cookies próprios: entre de novo dentro dele uma vez.
+
+A sessão dura 30 dias. Sem conexão com o servidor (internet, VPN ou Tailscale desligados), o app mostra "Sem conexão com o Orbit" no topo ou uma página offline ao abrir. O service worker guarda **só** essa página estática: recomendações, perfil, sessões e ações nunca ficam no aparelho, e nada que você tocar sem conexão é reenviado depois.
+
 ## Extensão no computador
 
 1. Entre no Orbit pelo endereço HTTPS, abra **Conectar navegador** e baixe a extensão (`orbit-extensao-<versão>.zip`).

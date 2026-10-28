@@ -53,8 +53,8 @@ export function aiStatus() {
     const config = getAIConfig(env);
     let briefingReady = false;
     try { briefingReady = !!getBriefingConfig(env); } catch { /* A configuração do briefing é independente. */ }
-    return config ? { ready: true, briefingReady, state: "ready" as const, message: "Configuração carregada; conexão será verificada ao analisar", protocol: config.protocol, model: config.model, tokenLimit, costLimit } : { ready: false, briefingReady, state: "missing" as const, message: "Configure URL, chave e modelo no .env", protocol: null, model: null, tokenLimit, costLimit };
+    return config ? { ready: true, briefingReady, state: "ready" as const, message: "Configuração carregada; conexão será verificada ao analisar", protocol: config.protocol, model: config.model, tokenLimit, costLimit } : { ready: false, briefingReady, state: "missing" as const, message: "Configure URL, chave e modelo no .env (orbit.env no Docker)", protocol: null, model: null, tokenLimit, costLimit };
   } catch (error) {
-    return { ready: false, briefingReady: false, state: "invalid" as const, message: error instanceof AIConfigurationError ? error.message : "Configuração inválida. Confira protocolo e limites numéricos no .env; nenhuma chave é exibida no diagnóstico.", protocol: null, model: null, tokenLimit, costLimit };
+    return { ready: false, briefingReady: false, state: "invalid" as const, message: error instanceof AIConfigurationError ? error.message : "Configuração inválida. Confira protocolo e limites numéricos no .env (orbit.env no Docker); nenhuma chave é exibida no diagnóstico.", protocol: null, model: null, tokenLimit, costLimit };
   }
 }

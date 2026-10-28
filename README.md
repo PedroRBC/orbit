@@ -4,9 +4,9 @@ Curador pessoal de conteúdo, local e em português. **Cinco fases implementadas
 
 Não confunda o que seus feeds mostram com uma visão completa do mundo. O Orbit indica fontes e limites da análise.
 
-## Docker e TrueNAS
+## Docker, TrueNAS e celular
 
-O Orbit roda como um serviço em contêiner: interface, worker e migrações juntos, banco SQLite persistente e IA configurada fora da imagem. Instalação, volumes, backup, atualização e diagnóstico estão em [docs/deploy.md](docs/deploy.md).
+O Orbit roda como um serviço em contêiner: interface, worker e migrações juntos, banco SQLite persistente e IA configurada fora da imagem. Pelo endereço HTTPS, ele pode ser instalado no celular como app (PWA). Instalação, volumes, acesso remoto, login, extensão, PWA no Android/iPhone, backup, atualização e diagnóstico estão em [docs/deploy.md](docs/deploy.md).
 
 ## Rodar
 

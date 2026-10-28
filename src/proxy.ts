@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { sessionCookie } from "./lib/auth";
 import { hostAllowed } from "./lib/hosts";
 
-const publicPaths = ["/login", "/api/health"];
+// Login, saúde e arquivos do PWA (sem dados pessoais): o navegador busca manifest e ícones sem cookies.
+const publicPaths = ["/login", "/api/health", "/manifest.webmanifest", "/sw.js", "/offline.html", "/icon.svg", "/apple-icon.png", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/maskable-512.png"];
 // Checagem otimista (só presença do cookie): páginas, ações e rotas validam a sessão no banco.
 export function proxy(request: NextRequest) {
   const host = request.headers.get("host");

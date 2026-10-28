@@ -25,6 +25,7 @@ COPY --from=build /app/src ./src
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/prompts ./prompts
+COPY --from=build /app/public ./public
 COPY --from=build /app/browser-extension ./browser-extension
 # 568 é o usuário "apps" do TrueNAS; outro UID pode ser usado com `user:` no Compose.
 RUN mkdir -p /data /backups /config && chown 568:568 /data /backups && chmod 700 /data /backups

@@ -43,7 +43,7 @@ test("configura interesses, adiciona fonte e funciona em desktop e celular", asy
   await page.getByRole("link", { name: "Status", exact: true }).click();
   await page.getByRole("button", { name: "Atualizar fontes" }).click();
   await expect(page.getByText("Concluída", { exact: true }).first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText("Configure URL, chave e modelo no .env", { exact: true })).toBeVisible();
+  await expect(page.getByText("Configure URL, chave e modelo no .env (orbit.env no Docker)", { exact: true })).toBeVisible();
   await page.screenshot({ path: ".impeccable/review/desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: ".impeccable/review/mobile.png", fullPage: true });
@@ -332,4 +332,52 @@ test("entra com senha e código do autenticador e sai do dispositivo", async ({ 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: ".impeccable/review/login-mobile.png", fullPage: true });
   } finally { await context.close(); }
+});
+
+test("PWA instalável: manifest, ícones e service worker públicos e sem dados pessoais", async ({ request }) => {
+  const response = await request.get("/manifest.webmanifest");
+  expect(response.status()).toBe(200);
+  const manifest = await response.json();
+  expect(manifest).toMatchObject({ short_name: "Orbit", start_url: "/", scope: "/", display: "standalone", lang: "pt-BR" });
+  expect(manifest.icons.map((icon: { sizes: string; purpose: string }) => `${icon.sizes}:${icon.purpose}`)).toEqual(["192x192:any", "512x512:any", "512x512:maskable"]);
+  for (const path of [...manifest.icons.map((icon: { src: string }) => icon.src), "/apple-icon.png"]) {
+    const icon = await request.get(path, { maxRedirects: 0 });
+    expect(`${path} ${icon.status()} ${icon.headers()["content-type"]}`).toBe(`${path} 200 image/png`);
+  }
+  const worker = await request.get("/sw.js", { maxRedirects: 0 });
+  expect(worker.status()).toBe(200);
+  expect(worker.headers()["cache-control"]).toContain("no-store");
+  expect((await request.get("/offline.html", { maxRedirects: 0 })).status()).toBe(200);
+  expect((await request.get("/perfil", { maxRedirects: 0 })).status()).toBe(307);
+});
+
+test("guarda só a página offline, avisa a desconexão e não reenvia nada", async ({ page, context }) => {
+  await page.goto("/status");
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  const cached = await page.evaluate(async () => (await Promise.all((await caches.keys()).map(async key => (await (await caches.open(key)).keys()).map(entry => new URL(entry.url).pathname)))).flat());
+  expect(cached).toEqual(["/offline.html"]);
+  await context.setOffline(true);
+  await expect(page.getByText("Sem conexão com o Orbit.")).toBeVisible();
+  await page.goto("/perfil").catch(() => {});
+  await expect(page.getByRole("heading", { name: "Sem conexão com o Orbit" })).toBeVisible();
+  await context.setOffline(false);
+  await page.goto("/perfil");
+  await expect(page.getByRole("heading", { name: "Um perfil que você entende." })).toBeVisible();
+  await expect(page.getByText("Sem conexão com o Orbit.")).toBeHidden();
+});
+
+test("controles têm alvo de toque de pelo menos 24 px no celular", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const small: string[] = [];
+  for (const path of ["/", "/fontes", "/perfil", "/status", "/configuracoes", "/conectar"]) {
+    await page.goto(path);
+    // Links dentro de frases são exceção do WCAG 2.5.8.
+    small.push(...await page.evaluate(route => [...document.querySelectorAll<HTMLElement>("a, button, select, input:not([type=hidden]), textarea, summary")]
+      .filter(element => element.offsetParent !== null && !element.closest("p, li, dd, td"))
+      .map(element => ({ element, box: element.getBoundingClientRect() }))
+      .filter(({ box }) => box.width < 24 || box.height < 24)
+      .map(({ element, box }) => `${route} ${element.tagName} "${(element.getAttribute("aria-label") || element.textContent || "").trim().slice(0, 30)}" ${Math.round(box.width)}x${Math.round(box.height)}`), path));
+  }
+  expect(small).toEqual([]);
 });

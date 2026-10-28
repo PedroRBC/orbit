@@ -18,11 +18,11 @@ export async function runWithConfiguredAI(db: OrbitDB, runId: number, collect?: 
   let config: AIConfig | null = null;
   let configNotice: string | undefined;
   try { env = readAIEnvironment(); config = getAIConfig(env); }
-  catch (error) { configNotice = error instanceof AIConfigurationError ? error.message : "Configuração de IA inválida. Corrija o .env; a coleta continua normalmente."; }
+  catch (error) { configNotice = error instanceof AIConfigurationError ? error.message : "Configuração de IA inválida. Corrija o .env (orbit.env no Docker); a coleta continua normalmente."; }
   let briefingConfig: AIConfig | null = null;
   let briefingNotice: string | undefined;
   try { briefingConfig = env ? getBriefingConfig(env) : null; }
-  catch { briefingNotice = "Configuração de briefing inválida. Confira modelo e preços próprios no .env."; }
+  catch { briefingNotice = "Configuração de briefing inválida. Confira modelo e preços próprios no .env (orbit.env no Docker)."; }
   return runCollection(db, runId, { config, collect, configNotice, briefingConfig, briefingNotice, ...control });
 }
 
@@ -81,7 +81,7 @@ export async function runCollection(db: OrbitDB, runId: number, dependencies: Ru
       const message = error instanceof Error && /^(Limite diário|A IA retornou JSON)/.test(error.message) ? error.message : "Falha ao gerar briefing. Dados e briefing anterior preservados; confira o endpoint e o modelo.";
       owned(() => setSetting(db, "briefing_notice", message));
     }
-  } else owned(() => setSetting(db, "briefing_notice", dependencies.briefingNotice || "Configure AI_BRIEFING_MODEL no .env para habilitar o briefing."));
+  } else owned(() => setSetting(db, "briefing_notice", dependencies.briefingNotice || "Configure AI_BRIEFING_MODEL no .env (orbit.env no Docker) para habilitar o briefing."));
   if (notice) owned(() => setSetting(db, "ai_notice", notice));
   owned(() => db.update(collectorRuns).set({ status: failures ? "partial" : "completed", finishedAt: Date.now(), itemCount: count, error: failures ? `${failures} etapa(s) falharam. Consulte as fontes e o aviso de IA.` : notice }).where(eq(collectorRuns.id, runId)).run());
 }

@@ -194,7 +194,7 @@ th:first-child, td:first-child { min-width: 150px; }
 .external-label { color: #b3e0d6; }
 .schedule-panel { margin-top: 28px; }
 .checkbox-label { display: flex; align-items: center; gap: 10px; }
-.checkbox-label input { width: 18px; height: 18px; accent-color: var(--accent); }
+.checkbox-label input { width: 24px; height: 24px; accent-color: var(--accent); }
 @media (max-width: 760px) { .outside-panel { padding: 23px 20px; } }
 .browser-sources { margin-bottom: 38px; }
 .browser-source-list { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
@@ -210,8 +210,8 @@ th:first-child, td:first-child { min-width: 150px; }
 .briefing-topics > section { padding: 21px 0; border-top: 1px solid #3b4560; min-width: 0; }
 .briefing-topics h3 { font-size: 17px; margin-bottom: 11px; }
 .briefing-topics p { font-size: 13px; color: #bdc9dc; }
-.briefing-sources { display: flex; flex-wrap: wrap; gap: 7px 15px; margin-top: 14px; }
-.briefing-sources a { color: var(--accent); text-decoration: underline; font-size: 11px; overflow-wrap: anywhere; }
+.briefing-sources { display: flex; flex-wrap: wrap; gap: 2px 15px; margin-top: 10px; }
+.briefing-sources a { color: var(--accent); text-decoration: underline; font-size: 12px; padding-block: 4px; overflow-wrap: anywhere; }
 .feedback-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 15px; }
 .feedback-controls button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 9px; min-height: 38px; border: 1px solid #5d6982; border-radius: 6px; color: #c6d0e2; background: var(--surface); font-size: 11px; }
 .feedback-controls button:hover { color: var(--ink); background: var(--raised); }
@@ -223,7 +223,11 @@ th:first-child, td:first-child { min-width: 150px; }
 .weight-form > label { font-size: 14px; overflow-wrap: anywhere; }
 .weight-form > input { width: 80px; }
 .weight-form > .form-message { grid-column: 1 / -1; margin-top: 0; }
-@media (max-width: 760px) { .briefing-panel { padding: 23px 20px; } .briefing-topics { grid-template-columns: 1fr; } .briefing-panel .section-heading { flex-direction: column; gap: 10px; } .weight-form { grid-template-columns: minmax(0, 1fr) 70px; gap: 12px; } .weight-form > .button { grid-column: 1 / -1; justify-self: start; } .weight-form > input { width: 70px; } nav > a { padding-inline: 3px; font-size: 10px; } }
+@media (max-width: 760px) { .briefing-panel { padding: 23px 20px; } .briefing-topics { grid-template-columns: 1fr; } .briefing-panel .section-heading { flex-direction: column; gap: 10px; } .weight-form { grid-template-columns: minmax(0, 1fr) 70px; gap: 12px; } .weight-form > .button { grid-column: 1 / -1; justify-self: start; } .weight-form > input { width: 70px; } nav > a { padding-inline: 2px; font-size: 11px; } }
+/* Alvo de toque ≥ 24 px (WCAG 2.5.8) sem mudar o fluxo do texto: padding em elemento inline não empurra linhas. */
+.notice a, .text-link, article h3 a { padding-block: 3px; }
+.connection-banner { position: sticky; top: 0; z-index: 60; display: flex; gap: 10px; align-items: center; padding: 11px 18px; background: #2d2416; color: var(--ink); border-bottom: 1px solid var(--warning); font-size: 14px; line-height: 1.45; }
+.connection-banner svg { color: var(--warning); flex-shrink: 0; }
 .login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
 .login-panel { width: min(100%, 420px); }
 .login-panel .brand { padding: 0; margin-bottom: 18px; }
