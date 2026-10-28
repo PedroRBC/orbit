@@ -3,19 +3,21 @@ import { z } from "zod";
 import type { OrbitDB } from "../db/index";
 import { feedback, interestProfile, processedItems } from "../db/schema";
 import { getProfile } from "./store";
+import { normalizeTheme, normalizeThemeWeights } from "./taxonomy";
 
 export const feedbackAction = z.enum(["up", "down", "save", "seen", "click"]);
 export type FeedbackAction = z.infer<typeof feedbackAction>;
 function storedWeights(db: OrbitDB): Record<string, number> {
   const value = getProfile(db)?.weights || "{}";
-  return z.record(z.string(), z.number().finite()).parse(JSON.parse(value));
+  return normalizeThemeWeights(JSON.parse(value));
 }
 export function learnedWeights(db: OrbitDB): Record<string, number> {
   return Object.fromEntries(Object.entries(storedWeights(db)).map(([theme, value]) => [theme, Math.max(-20, Math.min(20, value))]));
 }
 export function adjustedScore(score: number, weight: number) { return Math.max(0, Math.min(100, score + weight * 2)); }
 export function rankingExpression(weights: Record<string, number>) {
-  return sql<number>`max(0, min(100, ${processedItems.score} + 2 * coalesce((select value from json_each(${JSON.stringify(weights)}) where key = ${processedItems.theme}), 0)))`;
+  const normalized = Object.fromEntries(Object.entries(normalizeThemeWeights(weights)).map(([theme, value]) => [theme, Math.max(-20, Math.min(20, value))]));
+  return sql<number>`max(0, min(100, ${processedItems.score} + 2 * coalesce((select value from json_each(${JSON.stringify(normalized)}) where key = ${processedItems.theme}), 0)))`;
 }
 
 export function applyFeedback(db: OrbitDB, rawId: string, action: FeedbackAction) {
@@ -34,8 +36,9 @@ export function applyFeedback(db: OrbitDB, rawId: string, action: FeedbackAction
     db.insert(feedback).values(next).onConflictDoUpdate({ target: feedback.rawId, set: next }).run();
     if (delta) {
       const weights = storedWeights(db);
+      const theme = normalizeTheme(item.theme) ?? "outros";
       // Guardar valor não truncado mantém reversibilidade quando o peso visível já chegou ao limite.
-      Object.defineProperty(weights, item.theme, { value: (Object.hasOwn(weights, item.theme) ? weights[item.theme] : 0) + delta, enumerable: true, writable: true, configurable: true });
+      weights[theme] = (weights[theme] ?? 0) + delta;
       db.update(interestProfile).set({ weights: JSON.stringify(weights), updatedAt: Date.now() }).where(eq(interestProfile.id, 1)).run();
     }
     return next;
@@ -43,12 +46,13 @@ export function applyFeedback(db: OrbitDB, rawId: string, action: FeedbackAction
 }
 
 export function updateTopicWeight(db: OrbitDB, theme: string, weight: number) {
-  theme = z.string().trim().min(1).max(80).parse(theme);
-  z.number().int().min(-20).max(20).parse(weight);
+  const id = normalizeTheme(z.string().trim().min(1).max(80).parse(theme));
+  if (!id) throw new Error("Escolha um tema do catálogo da taxonomia.");
+  z.number().finite().min(-20).max(20).parse(weight);
   db.transaction(() => {
     if (!getProfile(db)) throw new Error("Configure seus interesses primeiro.");
     const weights = storedWeights(db);
-    Object.defineProperty(weights, theme, { value: weight, enumerable: true, writable: true, configurable: true });
+    weights[id] = weight;
     db.update(interestProfile).set({ weights: JSON.stringify(weights), updatedAt: Date.now() }).where(eq(interestProfile.id, 1)).run();
   }, { behavior: "immediate" });
 }

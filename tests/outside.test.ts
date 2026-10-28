@@ -14,9 +14,9 @@ it("prioriza temas complementares e mostra manchetes brutas sem fingir análise"
     saveRawItems(db, sourceId, [{ platform, externalId: id, title: id, text: "Trecho original", author: "Fonte", url: `https://news.example.com/${id}`, thumbnail: null, publishedAt: Date.now(), durationSeconds: null, evidence: platform === "news" ? "news_rss" : "rss" }]);
     if (theme) db.insert(processedItems).values({ rawId: `${platform}:${id}`, theme, tone: "informativo", language: "pt", type: "notícia", score, reason: "Teste", summary: "Resumo sintético", isSpam: false, model: "fixture", processedAt: Date.now() }).run();
   };
-  make(personal.id, "youtube", "personal", "Ciência");
-  make(news.id, "news", "news-science", "Ciência", 99);
-  make(news.id, "news", "news-world", "Mundo", 50);
+  make(personal.id, "youtube", "personal", "ciencia-saude");
+  make(news.id, "news", "news-science", "ciencia-saude", 99);
+  make(news.id, "news", "news-world", "politica-externa", 50);
   make(news.id, "news", "news-raw");
   const rows = outsideItems(db);
   expect(rows).toHaveLength(3);

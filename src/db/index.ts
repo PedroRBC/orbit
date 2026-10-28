@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import * as schema from "./schema";
+import { consolidateTaxonomy } from "./taxonomy";
 
 export function openDatabase(path: string) {
   if (path !== ":memory:") mkdirSync(dirname(resolve(path)), { recursive: true, mode: 0o700 });
@@ -12,8 +13,11 @@ export function openDatabase(path: string) {
   client.pragma("foreign_keys = ON");
   client.pragma("busy_timeout = 5000");
   const db = drizzle(client, { schema });
-  migrate(db, { migrationsFolder: resolve("drizzle") });
-  return db;
+  try {
+    migrate(db, { migrationsFolder: resolve("drizzle") });
+    consolidateTaxonomy(db);
+    return db;
+  } catch (error) { client.close(); throw error; }
 }
 export type OrbitDB = ReturnType<typeof openDatabase>;
 const state = globalThis as typeof globalThis & { orbitDatabase?: OrbitDB };

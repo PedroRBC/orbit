@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { getDatabase } from "../db/index";
 import { collectorRuns, interestProfile, settings, sources } from "../db/schema";
@@ -19,7 +19,7 @@ import { requireSession } from "../lib/session";
 import { applyFeedback, feedbackAction, updateTopicWeight } from "../lib/feedback";
 
 export type ActionResult = { message: string; error?: boolean; code?: string };
-function refresh() { for (const path of ["/", "/fontes", "/configuracoes", "/status", "/perfil"]) revalidatePath(path); }
+function refresh() { for (const path of ["/", "/briefings", "/fontes", "/configuracoes", "/status", "/perfil", "/temas"]) revalidatePath(path); }
 
 export async function saveProfile(_previous: ActionResult, form: FormData): Promise<ActionResult> {
   await requireSession();
@@ -56,7 +56,7 @@ export async function addNewsSource(_previous: ActionResult, form: FormData): Pr
   if (db.select().from(sources).where(eq(sources.channelId, url.href)).get()) return { error: true, message: "Essa fonte já foi cadastrada." };
   if (db.select().from(sources).where(eq(sources.kind, "news_rss")).all().length >= 10) return { error: true, message: "Limite de dez portais RSS para manter a coleta leve." };
   db.insert(sources).values({ channelId: url.href, name: parsed.data.name, kind: "news_rss", platform: "news" }).run();
-  refresh(); return { message: "RSS externo adicionado. Ele aparecerá somente em Fora da bolha após coleta e análise." };
+  refresh(); return { message: "RSS público adicionado. Ele alimenta os briefings gerais e Fora da bolha, nunca as recomendações pessoais." };
 }
 export async function saveSchedule(_previous: ActionResult, form: FormData): Promise<ActionResult> {
   await requireSession();
@@ -66,6 +66,18 @@ export async function saveSchedule(_previous: ActionResult, form: FormData): Pro
   const db = getDatabase();
   db.transaction(() => { setSetting(db, "scheduler_config", JSON.stringify({ ...parsed.data, enabled: form.get("enabled") === "on" })); db.delete(settings).where(eq(settings.key, "scheduler_enabled")).run(); }, { behavior: "immediate" });
   refresh(); return { message: "Agenda salva. O worker aplica mudanças após a execução atual; não faz coleta retroativa." };
+}
+
+export async function saveEditionSchedule(_previous: ActionResult, form: FormData): Promise<ActionResult> {
+  await requireSession();
+  const timezone = z.string().trim().min(1).max(100).safeParse(form.get("timezone"));
+  if (!timezone.success) return { error: true, message: "Informe um fuso IANA válido, como America/Sao_Paulo." };
+  try { new Intl.DateTimeFormat("pt-BR", { timeZone: timezone.data }); }
+  catch { return { error: true, message: "Fuso inválido. Use um identificador como America/Sao_Paulo." }; }
+  const enabled = form.get("enabled") === "on";
+  setSetting(getDatabase(), "edition_schedule", JSON.stringify({ enabled, timezone: timezone.data }));
+  refresh();
+  return { message: enabled ? `Edições gerais ativadas às 08h e 16h em ${timezone.data}. Somente RSS públicos configurados; atrasos de até duas horas podem ser recuperados.` : "Edições gerais pausadas. O arquivo e a coleta pessoal foram preservados." };
 }
 
 export async function beginPairing(): Promise<ActionResult> {
@@ -117,8 +129,8 @@ export async function recordClick(rawId: string): Promise<void> {
 
 export async function saveTopicWeight(_previous: ActionResult, form: FormData): Promise<ActionResult> {
   await requireSession();
-  const parsed = z.object({ theme: z.string().min(1).max(80), weight: z.coerce.number().int().min(-20).max(20) }).safeParse({ theme: form.get("theme"), weight: form.get("weight") });
-  if (!parsed.success) return { error: true, message: "Use um peso inteiro entre -20 e 20." };
+  const parsed = z.object({ theme: z.string().min(1).max(80), weight: z.coerce.number().finite().min(-20).max(20) }).safeParse({ theme: form.get("theme"), weight: form.get("weight") });
+  if (!parsed.success) return { error: true, message: "Use um peso entre -20 e 20, com decimais se necessário." };
   try { updateTopicWeight(getDatabase(), parsed.data.theme, parsed.data.weight); }
   catch { return { error: true, message: "Configure seu perfil antes de ajustar os pesos." }; }
   refresh();
@@ -128,7 +140,7 @@ export async function saveTopicWeight(_previous: ActionResult, form: FormData): 
 export async function requestCollection(): Promise<ActionResult> {
   await requireSession();
   const db = getDatabase();
-  const last = db.select().from(collectorRuns).where(isNull(collectorRuns.parentId)).orderBy(desc(collectorRuns.id)).get();
+  const last = db.select().from(collectorRuns).where(and(isNull(collectorRuns.parentId), eq(collectorRuns.kind, "collection"))).orderBy(desc(collectorRuns.id)).get();
   if (last?.finishedAt && Date.now() - last.finishedAt < 5 * 60_000) return { error: true, message: "Aguarde cinco minutos entre atualizações para respeitar as fontes e o orçamento." };
   enqueueCollection(db);
   refresh();

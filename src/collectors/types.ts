@@ -7,6 +7,7 @@ export type RawItem = {
   url: string;
   thumbnail: string | null;
   publishedAt: number | null;
+  newsPublishedAt?: number | null;
   durationSeconds: number | null;
   metrics?: Record<string, string>;
   evidence?: "rss" | "youtube_home" | "x_for_you" | "instagram_feed" | "valete_feed" | "valete_dom" | "news_rss";

@@ -5,6 +5,7 @@ import { sources, interestProfile, processedItems } from "../src/db/schema";
 import { saveRawItems, dailyUsage } from "../src/lib/store";
 import { getAIConfig } from "../src/lib/config";
 import { classifyPending } from "../src/ai/classify";
+import { TAXONOMY } from "../src/lib/taxonomy";
 
 const databases: ReturnType<typeof openDatabase>[] = [];
 const servers: Server[] = [];
@@ -19,7 +20,7 @@ function database() {
   saveRawItems(db, source.id, [{ platform: "youtube", externalId: "abcdefghijk", title: "Aula de ciência", text: "A descrição da aula.", author: "Canal", url: "https://www.youtube.com/watch?v=abcdefghijk", thumbnail: null, publishedAt: 1, durationSeconds: null }]);
   return db;
 }
-const classification = { items: [{ id: "youtube:abcdefghijk", theme: "Ciência", tone: "informativo", language: "pt", type: "educação", score: 90, reason: "Tema do perfil.", summary: "Uma aula de ciência, segundo a descrição.", isSpam: false }] };
+const classification = { items: [{ id: "youtube:abcdefghijk", theme: "ciencia-saude", tone: "informativo", language: "pt", type: "educação", score: 90, reason: "Tema do perfil.", summary: "Uma aula de ciência, segundo a descrição.", isSpam: false }] };
 async function endpoint(content: (call: number, body: { messages: { content: string }[] }) => unknown, usage = true) {
   let calls = 0;
   const server = createServer(async (request, response) => {
@@ -43,13 +44,33 @@ describe("pipeline com SQLite e SDK reais", () => {
     expect(await classifyPending(db, api.config)).toBe(1);
     expect(await classifyPending(db, api.config)).toBe(0);
     expect(api.calls()).toBe(1);
-    expect(db.select().from(processedItems).get()).toMatchObject({ rawId: "youtube:abcdefghijk", score: 90 });
+    expect(db.select().from(processedItems).get()).toMatchObject({ rawId: "youtube:abcdefghijk", theme: "ciencia-saude", score: 90 });
     expect(dailyUsage(db)).toMatchObject({ tokens: 150, reserved: 0, calls: 1 });
   });
   it("contabiliza JSON inválido antes de tentar novamente", async () => {
     const db = database(); const api = await endpoint(call => call === 1 ? { items: [] } : classification);
     expect(await classifyPending(db, api.config)).toBe(1);
     expect(api.calls()).toBe(2);
+    expect(dailyUsage(db)).toMatchObject({ tokens: 300, calls: 2 });
+  });
+  it("envia o catálogo e os pesos canônicos, rejeita tema inventado e repete sem persistir o inválido", async () => {
+    const db = database();
+    db.update(interestProfile).set({ weights: '{"tecnologia":2.5}' }).run();
+    const api = await endpoint((call, body) => {
+      for (const { id, label, description } of TAXONOMY) { expect(body.messages[0].content).toContain(id); expect(body.messages[0].content).toContain(label); expect(body.messages[0].content).toContain(description); }
+      expect(JSON.parse(body.messages[1].content).profile.learnedThemeWeights).toEqual({ tecnologia: 2.5 });
+      expect(db.select().from(processedItems).all()).toHaveLength(0);
+      return call === 1 ? { items: [{ ...classification.items[0], theme: "tema inventado" }] } : classification;
+    });
+    expect(await classifyPending(db, api.config)).toBe(1);
+    expect(api.calls()).toBe(2);
+    expect(db.select().from(processedItems).get()?.theme).toBe("ciencia-saude");
+  });
+  it("preserva a pendência quando a IA insiste em tema livre", async () => {
+    const db = database(); const api = await endpoint(() => ({ items: [{ ...classification.items[0], theme: "Ciência" }] }));
+    await expect(classifyPending(db, api.config)).rejects.toThrow(/inválido duas vezes/);
+    expect(api.calls()).toBe(2);
+    expect(db.select().from(processedItems).all()).toHaveLength(0);
     expect(dailyUsage(db)).toMatchObject({ tokens: 300, calls: 2 });
   });
   it("mantém consumo reservado se o endpoint omitir usage", async () => {

@@ -1,6 +1,8 @@
 import "dotenv/config";
 import cron, { type ScheduledTask } from "node-cron";
 import { queueScheduledRun, readSchedule } from "./lib/scheduler";
+import { queueDueEdition, readEditionSchedule } from "./lib/editions";
+import { drainPush } from "./lib/push";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { getDatabase } from "./db/index";
@@ -16,6 +18,7 @@ let active = false;
 let controller: AbortController | undefined;
 let scheduled: ScheduledTask | undefined;
 let scheduleKey = "";
+let editionTick = "";
 function stop() { stopping = true; controller?.abort(); }
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
@@ -49,6 +52,8 @@ try {
         }, { timezone: config.timezone, noOverlap: true, name: "orbit-collect" });
         setSetting(db, "scheduler_next", scheduled?.getNextRun()?.toISOString() || "");
       }
+      const tick = `${Math.floor(Date.now() / 60000)}:${JSON.stringify(readEditionSchedule(db))}`;
+      if (tick !== editionTick) { assertActive(); queueDueEdition(db, owner); editionTick = tick; }
       const run = claimRun(db, assertActive);
       if (run) {
         controller = new AbortController();
@@ -65,6 +70,12 @@ try {
             }, { behavior: "immediate" });
           } catch { active = false; stopping = true; }
         } finally { controller = undefined; }
+      }
+      if (!stopping && active) {
+        controller = new AbortController();
+        try { await drainPush(db, assertActive, controller.signal); }
+        catch { active = false; stopping = true; }
+        finally { controller = undefined; }
       }
     }
     if (!stopping) await new Promise(resolve => setTimeout(resolve, 1000));

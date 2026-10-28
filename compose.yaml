@@ -1,7 +1,7 @@
 # Orbit em um contêiner: interface, worker e migrações. Veja docs/deploy.md.
 services:
   orbit:
-    image: ${ORBIT_IMAGE:-ghcr.io/pedrorbc/orbit:0.2.0}
+    image: ${ORBIT_IMAGE:-ghcr.io/pedrorbc/orbit:0.2.1}
     build: .
     init: true
     restart: unless-stopped
@@ -20,6 +20,8 @@ services:
       COLLECTOR_TIMEZONE: ${COLLECTOR_TIMEZONE:-America/Sao_Paulo}
       # Hosts aceitos além de localhost (atrás do seu proxy HTTPS), separados por vírgula.
       ORBIT_ALLOWED_HOSTS: ${ORBIT_ALLOWED_HOSTS:-}
+      # Contato VAPID (mailto: ou HTTPS público). Vazio deixa o push desativado.
+      ORBIT_PUSH_SUBJECT: ${ORBIT_PUSH_SUBJECT:-}
     volumes:
       # Sem caminho definido, usa volumes nomeados (teste local).
       - ${ORBIT_DATA_DIR:-orbit-data}:/data

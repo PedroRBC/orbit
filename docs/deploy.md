@@ -4,6 +4,16 @@ Um contêiner roda a interface, o worker e as migrações. O banco SQLite (modo 
 
 O acesso é sempre protegido por senha e código TOTP. Fora de `localhost`, o login só acontece por HTTPS, através de um proxy reverso escolhido por você.
 
+## Evolução editorial na versão 0.2.1
+
+A versão `0.2.1` inclui temas controlados, briefings gerais 08h/16h e Web Push. A publicação foi autorizada pelo usuário para o destino privado existente; considere a imagem disponível somente depois da CI da tag `v0.2.1` concluir todas as verificações. A imagem anterior `0.2.0` não contém esses recursos. Instalação e alterações no TrueNAS continuam exigindo autorização própria.
+
+Antes de atualizar para esta versão, faça backup online verificado antes da migração de temas. O banco passa a incluir auditorias, arquivo de edições, inscrições push e chave privada VAPID: trate SQLite e backups como segredos. As migrações são locais, sem reclassificação paga; detalhes em [taxonomy.md](taxonomy.md).
+
+Briefings gerais usam o fuso salvo em Configurações ou o `COLLECTOR_TIMEZONE` explícito, com fechamentos 08h e 16h. Coletam somente RSS públicos no servidor, sem extensão. Sem fuso configurado, a interface propõe `America/Sao_Paulo` e pede confirmação. Guia: [briefings.md](briefings.md).
+
+Para Web Push, forneça **`ORBIT_PUSH_SUBJECT`** no ambiente do contêiner (contato `mailto:` ou HTTPS público válido), além dos hosts/fuso já usados; reinicie os processos. Não coloque essa variável apenas em `/config/orbit.env`, que lê somente `AI_*`. Nenhuma chave privada é colocada no YAML: VAPID é gerada uma vez no banco. É necessária saída DNS e HTTPS/443 para os serviços de push do navegador. Não abre uma porta adicional. Em HTTPS, ative em cada aparelho por clique e use o teste. Android e iOS têm requisitos e limites diferentes; veja [push.md](push.md).
+
 ## Visão geral
 
 | Item | Valor |
@@ -49,7 +59,7 @@ A chave fica só nesse arquivo. Não a coloque no YAML: variáveis do Compose ap
 ```yaml
 services:
   orbit:
-    image: ghcr.io/pedrorbc/orbit:0.2.0
+    image: ghcr.io/pedrorbc/orbit:0.2.1
     init: true
     restart: unless-stopped
     stop_grace_period: 30s
@@ -209,7 +219,7 @@ O que foi coletado depois da atualização se perde nessa volta.
 
 ## Imagem no GHCR
 
-O workflow `.github/workflows/ci.yml` roda testes, typecheck, build e e2e em todo PR e push. A imagem só é publicada (privada, `linux/amd64`) em dois casos:
+O workflow `.github/workflows/ci.yml` roda testes, typecheck, build e e2e em PRs, pushes na `main` e tags `v*`. Um push de branch isolado não dispara CI. A imagem só é publicada (privada, `linux/amd64`) em dois casos:
 
 | Evento | Tags publicadas |
 | --- | --- |
@@ -218,9 +228,9 @@ O workflow `.github/workflows/ci.yml` roda testes, typecheck, build e e2e em tod
 
 Use a versão ou o `sha-` no TrueNAS, nunca só `latest`. O `sha-` identifica exatamente o commit; a imagem também traz os labels `org.opencontainers.image.version` e `.revision`.
 
-O YAML deste guia usa a versão oficial `0.2.0`. O [pacote é privado](https://github.com/users/PedroRBC/packages/container/package/orbit); acessar o link e baixar a imagem exigem autenticação.
+O YAML deste guia fixa `0.2.1`. O [pacote é privado](https://github.com/users/PedroRBC/packages/container/package/orbit); acessar o link e baixar a imagem exigem autenticação. A CI da tag precisa concluir antes de instalar.
 
-A publicação da `main` produz `ghcr.io/pedrorbc/orbit:0.2.0`, `:latest` e `:sha-<commit curto>`, todas apontando para o mesmo digest daquela execução. `latest` acompanha a publicação mais recente: para uma atualização controlada no NAS, mantenha a versão fixa ou copie o digest do resumo da [publicação aprovada](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml?query=branch%3Amain):
+O lançamento por `v0.2.1` publica `ghcr.io/pedrorbc/orbit:0.2.1` e `:sha-<commit curto>`, sem alterar a main ou `latest`. O workflow desativa a promoção automática de semver para `latest`; somente o push na main publica essa tag. Para uma atualização controlada no NAS, mantenha a versão fixa ou copie o digest do resumo da [publicação aprovada](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml):
 
 ```text
 ghcr.io/pedrorbc/orbit@sha256:<digest publicado>

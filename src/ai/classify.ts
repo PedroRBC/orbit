@@ -7,9 +7,10 @@ import { processedItems, rawItems } from "../db/schema";
 import type { AIConfig } from "../lib/config";
 import { activeItemCondition, dailyUsage, getProfile } from "../lib/store";
 import { learnedWeights } from "../lib/feedback";
+import { TAXONOMY, themeSchema } from "../lib/taxonomy";
 import { estimateRequest, requestWithBudget } from "./request";
 
-const classification = z.object({ id: z.string(), theme: z.string().min(1).max(80), tone: z.string().min(1).max(80), language: z.string().min(1).max(80), type: z.string().min(1).max(80), score: z.number().int().min(0).max(100), reason: z.string().min(1).max(500), summary: z.string().min(1).max(1000), isSpam: z.boolean() });
+const classification = z.object({ id: z.string(), theme: themeSchema, tone: z.string().min(1).max(80), language: z.string().min(1).max(80), type: z.string().min(1).max(80), score: z.number().int().min(0).max(100), reason: z.string().min(1).max(500), summary: z.string().min(1).max(1000), isSpam: z.boolean() });
 export function validateClassification(text: string, ids: string[]) {
   const clean = text.trim().replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
   const result = z.object({ items: z.array(classification) }).parse(JSON.parse(clean));
@@ -22,7 +23,7 @@ export async function classifyPending(db: OrbitDB, config: AIConfig, assertActiv
   const owned = <T>(operation: () => T): T => db.transaction(() => { signal?.throwIfAborted(); assertActive(); return operation(); }, { behavior: "immediate" });
   const profile = getProfile(db);
   const personalProfile = !!profile?.interests.trim();
-  const prompt = readFileSync(resolve("prompts/classify.md"), "utf8");
+  const prompt = `${readFileSync(resolve("prompts/classify.md"), "utf8")}\nCatálogo permitido (id = valor de theme; label = nome para leitura):\n${JSON.stringify(TAXONOMY.map(({ id, label, description }) => ({ id, label, description })))}`;
   const payload = (rows: { item: typeof rawItems.$inferSelect }[]) => JSON.stringify({ profile: rows.some(({ item }) => item.platform !== "news") && profile ? { interests: profile.interests, excluded: profile.excluded, learnedThemeWeights: learnedWeights(db) } : undefined, items: rows.map(({ item }) => ({ id: item.id, title: item.title, description: item.text, author: item.author, relevanceScope: item.platform === "news" ? "Importância geral do noticiário externo, sem personalização" : "Relevância para o perfil pessoal", evidence: item.evidence === "news_rss" ? "Título e trecho RSS de um portal externo. Não vem do algoritmo pessoal, nem do artigo integral." : item.evidence === "youtube_home" ? "Somente título/autor visíveis na home. Sem descrição nem transcrição." : item.evidence === "x_for_you" ? "Texto e metadados visíveis no feed Para você do X." : item.evidence === "instagram_feed" ? "Legenda reconhecida e metadados visíveis do feed Instagram. Sem comentários nem stories." : (item.evidence === "valete_feed" || item.evidence === "valete_dom") ? "Trecho textual coletado de post/artigo no feed Valete+, sem HTML ou mídia." : "Somente título e descrição RSS; sem transcrição." })) });
   const estimate = (system: string, user: string) => estimateRequest(config, system, user);
   let processed = 0;
@@ -42,7 +43,7 @@ export async function classifyPending(db: OrbitDB, config: AIConfig, assertActiv
     if (!rows.length) throw new Error("Limite diário de IA: nenhuma pendência cabe no saldo atual. Itens preservados; confira o limite ou aguarde o próximo dia UTC.");
     const user = payload(rows);
     for (let attempt = 0; attempt < 2; attempt++) {
-      const system = attempt === 0 ? prompt : `${prompt}\nA resposta anterior era inválida. Confira JSON, todos os campos e IDs exatos.`;
+      const system = attempt === 0 ? prompt : `${prompt}\nA resposta anterior era inválida. Confira JSON, todos os campos, IDs exatos dos itens e theme como ID permitido do catálogo.`;
       const response = await requestWithBudget(db, config, system, user, assertActive, signal);
       let items: z.infer<typeof classification>[];
       try { items = validateClassification(response, rows.map(({ item }) => item.id)); }

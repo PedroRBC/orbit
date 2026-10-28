@@ -30,11 +30,11 @@ describe("briefing ancorado nas fontes", () => {
     const source = db.insert(sources).values({ channelId: "channel", name: "Canal" }).returning().get();
     db.insert(interestProfile).values({ id: 1, interests: "Ciência", excluded: "", updatedAt: 1 }).run();
     db.insert(rawItems).values({ id: "youtube:item", sourceId: source.id, externalId: "item", platform: "youtube", title: "Aula de ciência", text: "Descrição da aula", author: "Canal", url: "https://www.youtube.com/watch?v=abcdefghijk", fetchedAt: Date.now() }).run();
-    db.insert(processedItems).values({ rawId: "youtube:item", theme: "Ciência", tone: "informativo", language: "pt", type: "educação", score: 80, reason: "Perfil", summary: "Aula de ciência", isSpam: false, model: "fixture", processedAt: 1 }).run();
+    db.insert(processedItems).values({ rawId: "youtube:item", theme: "ciencia-saude", tone: "informativo", language: "pt", type: "educação", score: 80, reason: "Perfil", summary: "Aula de ciência", isSpam: false, model: "fixture", processedAt: 1 }).run();
     db.insert(sourceItems).values({ sourceId: source.id, rawId: "youtube:item" }).run();
     const news = db.insert(sources).values({ channelId: "https://news.example.com/rss", name: "Portal", platform: "news", kind: "news_rss" }).returning().get();
     saveRawItems(db, news.id, [{ platform: "news", evidence: "news_rss", externalId: "external", title: "Notícia externa", text: "Não é o algoritmo pessoal", author: "Portal", url: "https://news.example.com/external", thumbnail: null, publishedAt: Date.now(), durationSeconds: null }]);
-    db.insert(processedItems).values({ rawId: "news:external", theme: "Mundo", tone: "informativo", language: "pt", type: "notícia", score: 100, reason: "Geral", summary: "Notícia externa", isSpam: false, model: "fixture", processedAt: 1 }).run();
+    db.insert(processedItems).values({ rawId: "news:external", theme: "politica-externa", tone: "informativo", language: "pt", type: "notícia", score: 100, reason: "Geral", summary: "Notícia externa", isSpam: false, model: "fixture", processedAt: 1 }).run();
     let calls = 0;
     let invalidResponses = 0;
     const requests: { items: { id: string; description: string }[] }[] = [];
@@ -82,7 +82,7 @@ describe("briefing ancorado nas fontes", () => {
 
     db.update(rawItems).set({ text: "x".repeat(6000) }).where(eq(rawItems.id, "youtube:item")).run();
     db.insert(rawItems).values({ id: "youtube:second", sourceId: source.id, externalId: "second", platform: "youtube", title: "Outra aula", text: "x".repeat(6000), author: "Canal", url: "https://www.youtube.com/watch?v=secondvideo", fetchedAt: Date.now() }).run();
-    db.insert(processedItems).values({ rawId: "youtube:second", theme: "Ciência", tone: "informativo", language: "pt", type: "educação", score: 70, reason: "Perfil", summary: "Outra aula", isSpam: false, model: "fixture", processedAt: 1 }).run();
+    db.insert(processedItems).values({ rawId: "youtube:second", theme: "ciencia-saude", tone: "informativo", language: "pt", type: "educação", score: 70, reason: "Perfil", summary: "Outra aula", isSpam: false, model: "fixture", processedAt: 1 }).run();
     db.insert(sourceItems).values({ sourceId: source.id, rawId: "youtube:second" }).run();
     expect(await generateBriefing(db, { ...config, dailyTokenLimit: 15000 })).toBe(true);
     expect(db.select().from(briefings).orderBy(desc(briefings.id)).get()).toMatchObject({ sourceCount: 1, candidateCount: 2, budgetLimited: true });

@@ -20,16 +20,16 @@ colors:
 typography:
   body:
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-    fontSize: "15px"
-    lineHeight: 1.6
+    fontSize: "16px"
+    lineHeight: 1.65
   page-title:
-    fontSize: "clamp(27px, 3vw, 38px)"
+    fontSize: "2.25rem"
     fontWeight: 600
     lineHeight: 1.2
     letterSpacing: "-0.035em"
 rounded:
   control: "7px"
-  panel: "10px"
+  panel: "8px"
 components:
   button-primary:
     backgroundColor: "{colors.accent}"
@@ -40,7 +40,7 @@ components:
 
 # Design do Orbit
 
-Interface de operação: configurar fontes e preferências, ler recomendações e diagnosticar coletas. Não é uma landing page. Produto e escopo em PRODUCT.md; contrato da superfície em docs/surface-orbit.md.
+A leitura vem primeiro: panorama, edições e recomendações com origem e limites visíveis. Configurar fontes e preferências ou diagnosticar coletas são tarefas secundárias. Não é uma landing page nem um dashboard de métricas. Produto e escopo em PRODUCT.md; modos e contrato da superfície em docs/surface-orbit.md.
 
 ## Overview
 
@@ -65,15 +65,19 @@ Dark mode solicitado. Fundo azul-ardósia, navegação azul-profundo, seleção 
 
 ## Typography
 
-Fonte: `src/app/globals.css`. Corpo 15px/1.6; títulos de página responsivos 27–38px; seções 23px; títulos de itens 18px. Espaçamento em grupos de 7–12px e entre regiões 25–42px. Controles com altura mínima de 42px, bordas de 1px e raios de 7px; painéis usam 10–12px.
+Fonte: `src/app/globals.css`. Corpo 16px/1.65; títulos de página 2.25rem (36px), 1.875rem (30px) até 760px; seções 24px; títulos de itens 20px. Escala fixa por breakpoint, sem fonte remota. Texto de briefing e edição em 15–16px/1.75, com medida de 72–74ch; contexto e metadados têm peso menor, mas continuam legíveis. Espaçamento em grupos de 8–18px e entre regiões 28–48px. Navegação, botões e feedback têm altura mínima de 44px; links no texto e nas fontes mantêm pelo menos 24px. Bordas de 1px, controles com raio de 7px, painéis de operação com 8px.
 
 ## Layout
 
-Desktop: rail fixo de 224px, barra superior discreta, conteúdo até 1320px. Abaixo de 1100px o rail cai para 194px. Abaixo de 760px o rail vira navegação horizontal; formulários e conteúdo passam para uma coluna.
+Desktop: rail fixo de 212px, masthead discreto e conteúdo até 1280px com 48px de margem interna. Até 1100px, rail de 184px e margem de 28px. Até 760px, marca e Menu ocupam a primeira linha; Hoje, Briefings e Temas permanecem visíveis abaixo. Destinos secundários expandem no fluxo da página, sem modal. O conteúdo recebe margem de 20px e os formulários passam para uma coluna.
+
+Navegação: Hoje (`/`), Briefings (`/briefings`) e Temas (`/temas`) são primários. Salvos (`/?lista=saved`), Fontes, Configurações, Status e Navegador são secundários. Meu perfil permanece no masthead. A marca não usa badge de plano e o cabeçalho não mostra ponto verde sem estado real. O rail suporta rolagem em janelas baixas.
+
+A edição usa `.edition-header`, `.edition-meta`, `.edition-highlights`, `.edition-highlight`, `.edition-context` e `.edition-sources`: uma coluna de leitura, cobertura e origem explícitas. O cabeçalho agrupa os metadados com gap de 10px, sem somar a margem dos textos auxiliares. Os destaques têm títulos de 22–24px; Contexto, Por que importa e Nas fontes usam 14px, com 8–20px entre título e texto. Fontes ficam em blocos separados: link sublinhado e ícone inline, autor/data em nova linha menor. `.edition-list` separa as entradas do arquivo por linhas; `.edition-link` é apenas o link de título dentro de `h2`, não um card contendo os metadados. `.edition-empty` mantém uma orientação concreta quando falta conteúdo; `.edition-spotlight` apresenta o resumo da home com introdução de 18px (17px no celular), metadados e avisos de 13px, título e CTA. `.push-settings` e `.edition-schedule` reutilizam a linguagem dos formulários existentes.
 
 Fora da bolha usa superfície azul-esverdeada #182932, bordas #3e5961 e rótulo textual “Fonte externa · RSS”. Notícias ficam fora dos filtros/recomendações pessoais; itens sem IA indicam trecho original. Status inclui texto de saldo e medidor nativo de uma única razão, sem gráfico categórico, com teto/saldo em tabela legível.
 
-Fase 2: briefing em painel azul-ardósia com tópicos em duas colunas no desktop, uma no mobile; fontes são links sublinhados e cortes por orçamento têm aviso textual. Feedback usa botões compactos com aria-pressed, sem ações sociais externas. Meu perfil usa campos numéricos editáveis para pesos, sem gráficos decorativos.
+Briefing pessoal: coluna de leitura com tópicos separados por linhas, sem painel envolvendo outros painéis; fontes são links sublinhados e cortes por orçamento têm aviso textual. Feedback usa botões com aria-pressed e alvos de 44px, sem ações sociais externas. Meu perfil usa campos numéricos editáveis para pesos, sem gráficos decorativos.
 
 Home vazia: introdução e sequência de configuração com ações reais. Não inventar recomendações. Home populada: filtros antes da lista; thumbnail 16:9, título, autor/data, resumo, relevância textual e justificativa. Links externos abrem com noopener/noreferrer.
 
@@ -81,7 +85,7 @@ Fontes: lista de canais com pausa reversível, sem exclusão destrutiva. Configu
 
 ## Components
 
-Labels ligados a inputs, navegação com aria-current, skip link e foco visível de 2px. Ações têm pending/disabled, resultados com status/alert e mensagens de recuperação. Conteúdo externo é texto escapado por React. Sem animações de entrada que escondam informação; transições curtas de cor, desativadas em reduced motion.
+Labels ligados a inputs, navegação com aria-current, skip link e foco visível de 2px. O `main` admite foco por âncora. Menu móvel usa botão com aria-expanded/aria-controls; Escape recolhe e devolve foco ao botão. Ações têm pending/disabled, resultados com status/alert e mensagens de recuperação. Carregamento usa placeholders estáticos ocultos da árvore acessível e texto anunciado; não mostra títulos ou contagens fictícios. Vazios seguem alinhamento à esquerda, sem cards aninhados. Erro e 404 compartilham coluna de leitura e ações claras de recuperação, sem exibir exceções. Conteúdo externo é texto escapado por React. Sem animações de entrada, shimmer ou efeitos que escondam informação; transições curtas de cor, desativadas em reduced motion.
 
 ## Do's and Don'ts
 
