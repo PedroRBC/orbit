@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Orbit — coletor local",
+  "version": "0.2.2",
+  "description": "Lê seus feeds em abas próprias e envia somente metadados ao Orbit local. Não lê cookies nem senhas.",
+  "minimum_chrome_version": "120",
+  "permissions": ["storage", "alarms", "scripting", "declarativeNetRequest"],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "https://www.youtube.com/*",
+    "https://x.com/*",
+    "https://www.x.com/*",
+    "https://twitter.com/*",
+    "https://www.instagram.com/*",
+    "https://app.valete.org.br/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Orbit local" },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'" }
+}
