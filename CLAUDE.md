@@ -12,7 +12,7 @@ Alteração aprovada em 27/10/2026: o endpoint de IA aceita protocolo OpenAI Com
 
 - Node.js >=22.12. `npm install` instala dependências.
 - `npm run dev`: compila extensão, migra SQLite e inicia Next e worker. Localhost por padrão.
-- `npm run auth -- setup|logout-all|status`: senha + TOTP + códigos de recuperação (terminal, sem log). No Docker: `docker exec -it <contêiner> npm run auth -- setup`.
+- `npm run auth -- setup|logout-all|unlock|status`: senha + TOTP + códigos de recuperação (terminal, sem log). No Docker: `docker exec -it <contêiner> npm run auth -- setup`.
 - `npm run db:backup [dir]`: backup online verificado (arquivo único, sem -wal).
 - Docker: `docker compose up -d --build` (volumes nomeados); guia TrueNAS em docs/deploy.md.
 - CI (`.github/workflows/ci.yml`): testes, typecheck, build e e2e em PR/push; imagem privada `ghcr.io/pedrorbc/orbit` só em push na main (`<versão>`, `sha-<curto>`, `latest`) ou tag `v*` (semver + `sha-`). Empurrar tag = publicar: exige confirmação do usuário.
@@ -25,7 +25,7 @@ Alteração aprovada em 27/10/2026: o endpoint de IA aceita protocolo OpenAI Com
 ## Arquitetura
 
 - `src/app`: Server Components consultam o banco; Server Actions validam formulários e enfileiram. Nunca chamar IA na renderização. Páginas protegidas ficam em `src/app/(app)/` (layout chama `requireSession()`); `/login` fica fora do grupo.
-- Login: `src/lib/auth.ts` (scrypt, TOTP RFC 6238 ±1 passo sem replay, recuperação de uso único, sessões com hash, limite 5/cliente e 20/total em 15 min); `src/lib/session.ts`. Cookie `__Host-orbit_session` HttpOnly/Secure/SameSite=Strict, 30 dias. Login só por HTTPS (X-Forwarded-Proto) ou loopback. Toda Server Action exportada começa com `await requireSession()` (teste session-guard); route handlers também. O proxy só confere presença do cookie.
+- Login: `src/lib/auth.ts` (scrypt, TOTP RFC 6238 ±1 passo sem replay, recuperação de uso único, sessões com hash, limite de 5 erros/15 min só por cliente = último salto do X-Forwarded-For; sem bloqueio global, que permitiria trancar o dono); `src/lib/session.ts`. Cookie `__Host-orbit_session` HttpOnly/Secure/SameSite=Strict, 30 dias. Login só por HTTPS (X-Forwarded-Proto) ou loopback. Toda Server Action exportada, página e rota de `(app)` começa com `await requireSession()` (teste session-guard): layout NÃO protege a renderização da página/RSC. O proxy também valida a sessão no banco.
 - PWA: `src/app/manifest.ts`, ícones de `scripts/pwa-icons.ts`, `public/sw.js` guarda só `/offline.html` (só navegações GET; nunca dados, sessões ou POST). `src/app/connection.tsx` registra o SW e avisa desconexão consultando `/api/health`; não usar `experimental.useOffline` (reenvia Server Actions). Manifest, ícones, SW e offline são públicos no proxy. Alvos de toque ≥ 24 px verificados no e2e.
 - `src/lib/hosts.ts` + `src/proxy.ts`: Host local ou listado em ORBIT_ALLOWED_HOSTS (senão 403); Origin/Sec-Fetch-Site mantidos; públicos só `/login`, `/api/health`, `/api/companion/*`. Redirect usa o Host validado, nunca request.url.
 - Docker: Dockerfile multi-stage, usuário 568, raiz somente leitura, `/data` (SQLite), `/config/orbit.env` (só AI_*), `/backups`; HEALTHCHECK em `/api/health` (heartbeat do worker). `scripts/dev.ts --production` supervisiona Next e worker; erro claro se /data não for gravável.

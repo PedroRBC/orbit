@@ -1,4 +1,5 @@
 import { connection } from "next/server";
+import { requireSession } from "../../../lib/session";
 import { desc, eq, isNull, sql } from "drizzle-orm";
 import { Activity, ShieldCheck } from "lucide-react";
 import { getDatabase } from "../../../db/index";
@@ -12,6 +13,7 @@ import { runLabels as labels } from "../../../lib/run-labels";
 
 export const metadata = { title: "Status" };
 export default async function StatusPage() {
+  await requireSession();
   await connection();
   const db = getDatabase(), ai = aiStatus(), extension = connectionStatus(db), usage = dailyUsage(db), schedule = readSchedule(db);
   const next = getSetting(db, "scheduler_next");

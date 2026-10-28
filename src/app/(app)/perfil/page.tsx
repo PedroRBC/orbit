@@ -1,4 +1,5 @@
 import { connection } from "next/server";
+import { requireSession } from "../../../lib/session";
 import { getDatabase } from "../../../db/index";
 import { getProfile } from "../../../lib/store";
 import { learnedWeights } from "../../../lib/feedback";
@@ -7,6 +8,7 @@ import { ActionForm, SubmitButton } from "../../components";
 
 export const metadata = { title: "Meu perfil" };
 export default async function ProfilePage() {
+  await requireSession();
   await connection();
   const db = getDatabase();
   const profile = getProfile(db);

@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { createInterface } from "node:readline/promises";
 import { getDatabase } from "../src/db/index";
-import { authConfigured, configureCredentials, newTotpSecret, revokeAllSessions, totpCode, totpURI } from "../src/lib/auth";
+import { authConfigured, clearLoginLocks, configureCredentials, newTotpSecret, revokeAllSessions, totpCode, totpURI } from "../src/lib/auth";
 
 process.umask(0o077);
 const command = process.argv[2];
@@ -36,16 +36,20 @@ try {
     console.log(`\nNo app autenticador, adicione uma conta pela chave (TOTP, 6 dígitos, 30 s):\n\n  ${secret.match(/.{1,4}/g)!.join(" ")}\n\nOu use este endereço: ${totpURI(secret)}\n`);
     const step = Math.floor(Date.now() / 30_000);
     const code = (await ask("Digite o código de 6 dígitos que o app mostra agora: ")).trim();
-    if (![step - 1, step, step + 1].some(candidate => totpCode(secret, candidate) === code)) throw new Error("Código não confere. Nada foi alterado; rode o comando de novo.");
-    const recovery = configureCredentials(db, password, secret);
+    const confirmed = [step - 1, step, step + 1].find(candidate => totpCode(secret, candidate) === code);
+    if (confirmed === undefined) throw new Error("Código não confere. Nada foi alterado; rode o comando de novo.");
+    const recovery = configureCredentials(db, password, secret, confirmed);
     console.log(`\nAcesso configurado. Todas as sessões anteriores foram encerradas.\nGuarde estes códigos de recuperação (cada um vale uma vez, no lugar do código do app):\n\n  ${recovery.join("\n  ")}\n`);
   } else if (command === "logout-all") {
     revokeAllSessions(db);
     console.log("Todas as sessões foram encerradas.");
+  } else if (command === "unlock") {
+    clearLoginLocks(db);
+    console.log("Bloqueios de tentativas removidos. Senha, autenticador e sessões continuam iguais.");
   } else if (command === "status") {
     console.log(authConfigured(db) ? "Acesso configurado." : "Acesso ainda não configurado. Rode: npm run auth -- setup");
   } else {
-    console.log("Uso: npm run auth -- setup | logout-all | status");
+    console.log("Uso: npm run auth -- setup | logout-all | unlock | status");
     process.exitCode = 1;
   }
 } catch (error) {

@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { requireSession } from "../../../lib/session";
 import extensionManifest from "../../../../browser-extension/manifest.json";
 import Link from "next/link";
 import { getDatabase } from "../../../db/index";
@@ -9,6 +10,7 @@ import { ActionForm, PairingForm, SubmitButton, WorkRefresh } from "../../compon
 
 export const metadata = { title: "Conectar navegador" };
 export default async function ConnectPage() {
+  await requireSession();
   const origin = requestOrigin(await headers());
   const status = connectionStatus(getDatabase());
   return <><WorkRefresh active={status.paired}/><div className="page-heading"><div><h1>Seu navegador. Seu login.</h1><p>Entre normalmente pelo Helium no seu computador. O Orbit não abre um navegador automatizado nem pede seus cookies.</p></div></div>

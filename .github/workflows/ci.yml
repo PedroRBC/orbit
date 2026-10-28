@@ -24,10 +24,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # Testes unitários de leitores também usam o Chromium do Playwright.
+      - run: npx playwright install --with-deps chromium
       - run: npm test
       - run: npm run typecheck
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
         env:
           E2E_PRODUCTION: "1"

@@ -300,8 +300,19 @@ test("sem sessão, páginas levam ao login e ações e downloads são recusados"
   expect((await request.post("/", { headers: { Origin: "http://127.0.0.1:3101" }, data: {} })).status()).toBe(401);
   const forged = await request.get("/status", { maxRedirects: 0, headers: { Cookie: `${sessionCookie}=inventado` } });
   expect(forged.status()).toBe(307);
-  expect(forged.headers().location).toMatch(/\/login$/);
+  expect(forged.headers().location).toMatch(/\/login\?next=%2Fstatus$/);
   expect((await request.get("/api/health")).status()).toBe(200);
+  // Reprodução da revisão: cookie inventado não pode receber o payload RSC da página.
+  const rsc = await request.get("/perfil?_rsc=1", { maxRedirects: 0, headers: { RSC: "1", Cookie: `${sessionCookie}=inventado` } });
+  expect(rsc.status()).toBe(307);
+  expect(await rsc.text()).not.toContain("Ciência, tecnologia");
+});
+
+test("após o login, next com tab ou barra dupla não sai do Orbit", async ({ page }) => {
+  for (const next of ["%2F%09%2Fevil.example", "%2F%2Fevil.example", "%2F%5Cevil.example"]) {
+    const response = await page.request.get(`/login?next=${next}`, { maxRedirects: 0 });
+    expect(`${next} ${response.status()} ${new URL(response.headers().location, "http://127.0.0.1:3101").href}`).toBe(`${next} 307 http://127.0.0.1:3101/`);
+  }
 });
 
 test("entra com senha e código do autenticador e sai do dispositivo", async ({ browser, baseURL }) => {

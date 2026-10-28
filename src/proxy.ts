@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sessionCookie } from "./lib/auth";
+import { getDatabase } from "./db/index";
+import { sessionCookie, sessionValid } from "./lib/auth";
 import { hostAllowed } from "./lib/hosts";
 
 // Login, saúde e arquivos do PWA (sem dados pessoais): o navegador busca manifest e ícones sem cookies.
 const publicPaths = ["/login", "/api/health", "/manifest.webmanifest", "/sw.js", "/offline.html", "/icon.svg", "/apple-icon.png", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/maskable-512.png"];
-// Checagem otimista (só presença do cookie): páginas, ações e rotas validam a sessão no banco.
+// Valida a sessão no banco: o layout não impede a página de renderizar (payload RSC). Páginas, ações e rotas checam de novo.
 export function proxy(request: NextRequest) {
   const host = request.headers.get("host");
   if (!hostAllowed(host)) return new NextResponse("Host não permitido. Inclua este endereço em ORBIT_ALLOWED_HOSTS.", { status: 403 });
@@ -20,7 +21,7 @@ export function proxy(request: NextRequest) {
     }
     if (request.headers.get("sec-fetch-site") === "cross-site") return new NextResponse("Origem não permitida", { status: 403 });
   }
-  if (publicPaths.includes(path) || request.cookies.get(sessionCookie)?.value) return NextResponse.next();
+  if (publicPaths.includes(path) || sessionValid(getDatabase(), request.cookies.get(sessionCookie)?.value)) return NextResponse.next();
   if (!["GET", "HEAD"].includes(request.method)) return NextResponse.json({ error: "Sessão necessária." }, { status: 401 });
   // Base no Host já validado: request.url pode trazer o endereço interno (0.0.0.0, localhost).
   const scheme = request.headers.get("x-forwarded-proto")?.split(",")[0].trim() === "https" ? "https" : "http";

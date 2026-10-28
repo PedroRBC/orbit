@@ -12,6 +12,8 @@ export function hostAllowed(host: string | null, env: Record<string, string | un
   const allowed = (env.ORBIT_ALLOWED_HOSTS || "").split(/[\s,]+/).map(entry => entry.trim().toLowerCase()).filter(Boolean);
   return allowed.includes(url.hostname) || allowed.includes(url.host);
 }
+// Último salto do X-Forwarded-For: o que o proxy reverso acrescentou (os anteriores vêm do cliente).
+export function loginClient(headers: Headers) { return headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() || "local"; }
 // Origem pública vista pelo navegador: HTTPS informado pelo proxy reverso, ou HTTP só em loopback.
 export function requestOrigin(headers: Headers) {
   const url = parse(headers.get("host"));

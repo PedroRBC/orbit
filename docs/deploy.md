@@ -8,7 +8,7 @@ O acesso é sempre protegido por senha e código TOTP. Fora de `localhost`, o lo
 
 | Item | Valor |
 | --- | --- |
-| Imagem | `ghcr.io/pedrorbc/orbit:<versão>` (privada; publicada na F4). Teste local: `docker compose up -d --build` |
+| Imagem | `ghcr.io/pedrorbc/orbit:<versão>` ou `:sha-<commit>` (privada; veja "Imagem no GHCR"). Teste local: `docker compose up -d --build` |
 | Porta interna | `3000` (HTTP). O Compose publica em `30480` por padrão (`ORBIT_PORT`) |
 | Usuário | `568:568` (usuário `apps` do TrueNAS), sem root, sem capabilities, raiz somente leitura |
 | `/data` | Banco `orbit.db` com `-wal`/`-shm`. Gravável pelo UID do contêiner, modo 700 |
@@ -90,7 +90,7 @@ No Shell do TrueNAS:
 docker exec -it ix-orbit-orbit-1 npm run auth -- setup
 ```
 
-O comando pede uma senha (mínimo 12 caracteres, digitada sem eco), mostra a chave TOTP para cadastrar no app autenticador do celular, confere um código e exibe oito códigos de recuperação. Guarde esses códigos fora do NAS. Nada disso vai para os logs do contêiner. Rodar `setup` de novo troca senha e autenticador e encerra todas as sessões; `npm run auth -- logout-all` só encerra as sessões.
+O comando pede uma senha (mínimo 12 caracteres, digitada sem eco), mostra a chave TOTP para cadastrar no app autenticador do celular, confere um código e exibe oito códigos de recuperação. Guarde esses códigos fora do NAS. Nada disso vai para os logs do contêiner. Rodar `setup` de novo troca senha e autenticador e encerra todas as sessões; `npm run auth -- logout-all` só encerra as sessões; `npm run auth -- unlock` só remove bloqueios de tentativas.
 
 ### 5. Conferir
 
@@ -117,7 +117,8 @@ Rede, DNS, certificados e roteador ficam por sua conta.
 
 - Abrir `http://<IP do NAS>:30480` direto mostra o login com o aviso "Abra o Orbit pelo endereço HTTPS" (e só se o IP estiver em `ORBIT_ALLOWED_HOSTS`). Senha e código nunca são aceitos por HTTP fora de localhost.
 - A porta 30480 não precisa estar aberta na internet: só o proxy precisa alcançá-la. Se o proxy roda no próprio NAS, você pode publicar só em loopback (`"127.0.0.1:30480:3000"`) quando o proxy usar rede do host.
-- Seguidos erros de senha/código bloqueiam novas tentativas por 15 minutos (5 por cliente, 20 no total). O proxy deve enviar `X-Forwarded-For` para o limite por cliente funcionar; o limite total vale sempre.
+- Cinco erros de senha/código bloqueiam aquele cliente por 15 minutos. O cliente é o último endereço do `X-Forwarded-For`, isto é, o que o seu proxy acrescenta; sem esse cabeçalho, todos contam como um só. Não há bloqueio global, para ninguém conseguir trancar você fora. Se publicar na internet, configure também limite de requisições no proxy (ex.: em `/login`). `npm run auth -- unlock` remove os bloqueios.
+- A porta publicada deve ficar acessível só ao proxy (firewall, rede interna do Docker, ou `127.0.0.1:` quando o proxy usa a rede do host). Um cliente que fale direto com ela pode forjar `X-Forwarded-Proto`; isso não expõe sua senha, mas tira do proxy o controle de quem chega ao app.
 
 ## App no celular (PWA)
 
@@ -241,6 +242,7 @@ Para usar IA no teste, copie um `orbit.env` para o volume `orbit-config`. Nunca 
 | Login diz "Abra o Orbit pelo endereço HTTPS" | Acesso por HTTP ou proxy sem `X-Forwarded-Proto: https` | Use o endereço HTTPS; ajuste o proxy |
 | "Acesso ainda não configurado" | Primeiro uso | Rode o `setup` do passo 4 |
 | Perdeu o autenticador | — | Entre com um código de recuperação ou rode o `setup` de novo pelo Shell do TrueNAS |
+| "Muitas tentativas" | 5 erros seguidos do mesmo endereço | Aguarde 15 min ou rode `docker exec ix-orbit-orbit-1 npm run auth -- unlock` |
 | Extensão "Sem permissão para acessar o endereço" | Permissão negada no Helium | Conecte de novo e permita o acesso ao host do Orbit |
 
 Comandos úteis:

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { openDatabase } from "../src/db/index";
-import { attemptLogin, authConfigured, configureCredentials, createSession, hashPassword, newTotpSecret, revokeAllSessions, revokeSession, sessionValid, totpCode, verifyPassword } from "../src/lib/auth";
+import { attemptLogin, authConfigured, clearLoginLocks, configureCredentials, createSession, hashPassword, newTotpSecret, revokeAllSessions, revokeSession, sessionValid, totpCode, verifyPassword } from "../src/lib/auth";
 
 const databases: ReturnType<typeof openDatabase>[] = [];
 function database() { const db = openDatabase(":memory:"); databases.push(db); return db; }
@@ -53,18 +53,30 @@ describe("login", () => {
   it("aceita código de recuperação uma única vez, com ou sem hífen", () => {
     const { db, recovery } = configured();
     expect(recovery).toHaveLength(8);
-    expect(recovery[0]).toMatch(/^[A-Z2-7]{5}-[A-Z2-7]{5}$/);
-    expect(attemptLogin(db, { password, code: recovery[0].replace("-", "").toLowerCase(), client: "a" }, now)).toHaveProperty("token");
+    expect(recovery[0]).toMatch(/^[A-Z2-7]{4}(-[A-Z2-7]{4}){3}$/);
+    expect(attemptLogin(db, { password, code: recovery[0].replaceAll("-", "").toLowerCase(), client: "a" }, now)).toHaveProperty("token");
     expect(attemptLogin(db, { password, code: recovery[0], client: "a" }, now)).toHaveProperty("error");
   });
-  it("bloqueia o cliente após 5 falhas e todos após 20, mesmo com a senha certa", () => {
+  it("bloqueia só o cliente que errou 5 vezes, sem trancar o dono por tentativas de outros", { timeout: 15_000 }, () => {
     const { db } = configured();
     for (let index = 0; index < 5; index++) attemptLogin(db, { password, code: "000000", client: "a" }, now);
     expect(attemptLogin(db, { password, code: totpCode(rfcSecret, step), client: "a" }, now)).toMatchObject({ error: expect.stringContaining("Muitas tentativas") });
+    // Acima do antigo teto global de 20 falhas.
+    for (let index = 0; index < 25; index++) attemptLogin(db, { password, code: "000000", client: `c${index}` }, now);
     expect(attemptLogin(db, { password, code: totpCode(rfcSecret, step), client: "b" }, now)).toHaveProperty("token");
-    for (let index = 0; index < 20; index++) attemptLogin(db, { password, code: "000000", client: `c${index}` }, now + 31_000);
-    expect(attemptLogin(db, { password, code: totpCode(rfcSecret, step + 2), client: "d" }, now + 61_000)).toMatchObject({ error: expect.stringContaining("Muitas tentativas") });
-    expect(attemptLogin(db, { password, code: totpCode(rfcSecret, step + 32), client: "d" }, now + 16 * 60_000)).toHaveProperty("token");
+    expect(attemptLogin(db, { password, code: totpCode(rfcSecret, step + 30), client: "a" }, now + 15 * 60_000)).toHaveProperty("token");
+  });
+  it("desbloqueio manual limpa os bloqueios sem trocar credenciais", () => {
+    const { db } = configured();
+    for (let index = 0; index < 5; index++) attemptLogin(db, { password, code: "000000", client: "a" }, now);
+    clearLoginLocks(db);
+    expect(attemptLogin(db, { password, code: totpCode(rfcSecret, step), client: "a" }, now)).toHaveProperty("token");
+  });
+  it("o código usado para confirmar o setup não serve para entrar", () => {
+    const db = database();
+    configureCredentials(db, password, rfcSecret, step);
+    expect(attemptLogin(db, { password, code: totpCode(rfcSecret, step), client: "a" }, now)).toHaveProperty("error");
+    expect(attemptLogin(db, { password, code: totpCode(rfcSecret, step + 1), client: "a" }, now)).toHaveProperty("token");
   });
 });
 

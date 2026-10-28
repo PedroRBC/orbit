@@ -5,7 +5,10 @@ import { ExtensionError, extensionOriginAllowed, pairExtension, verifyExtension,
 const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 async function body(request: Request): Promise<unknown> {
   if (!request.headers.get("content-type")?.includes("application/json")) throw new ExtensionError("Use application/json.", 415);
-  if (Number(request.headers.get("content-length")) > 3_000_000) throw new ExtensionError("Pedido grande demais.", 413);
+  // Sem Content-Length (ex.: chunked) o corpo não teria limite antes da leitura.
+  const length = request.headers.get("content-length");
+  if (!length || !/^\d{1,9}$/.test(length)) throw new ExtensionError("Informe o tamanho do pedido.", 411);
+  if (Number(length) > 3_000_000) throw new ExtensionError("Pedido grande demais.", 413);
   return request.json();
 }
 // serverOrigin vem de requestOrigin(): HTTPS informado pelo proxy reverso ou HTTP em loopback.

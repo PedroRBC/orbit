@@ -38,6 +38,13 @@ describe("pareamento da extensão", () => {
     expect(page.status).toBe(403);
     expect((await page.json()).error).toMatch(/Origem/);
   });
+  it("a API da extensão exige Content-Length de até 3 MB antes de ler o corpo", async () => {
+    const post = (headers: Record<string, string>) => companion(new Request("http://0.0.0.0:3000/api/companion/pair", { method: "POST", headers: { Host: "127.0.0.1:3000", "Content-Type": "application/json", Origin: origin, "X-Orbit-Extension-Id": extensionId, ...headers }, body: JSON.stringify({ code: "x" }) }));
+    expect((await post({})).status).toBe(411);
+    expect((await post({ "Content-Length": "3000001" })).status).toBe(413);
+    expect((await post({ "Content-Length": "abc" })).status).toBe(411);
+    expect((await post({ "Content-Length": String(JSON.stringify({ code: "x" }).length) })).status).toBe(401);
+  });
   it("usa código único e revoga o token sem expor cookie", () => {
     const { db } = setup(); const code = createPairingCode(db);
     const result = pairExtension(db, code, extensionId, "http://127.0.0.1:3000");

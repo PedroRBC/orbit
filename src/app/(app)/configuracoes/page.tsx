@@ -1,4 +1,5 @@
 import { connection } from "next/server";
+import { requireSession } from "../../../lib/session";
 import { LockKeyhole, Sparkles, ArrowUpRight } from "lucide-react";
 import { getDatabase } from "../../../db/index";
 import { getProfile } from "../../../lib/store";
@@ -9,6 +10,7 @@ import { ActionForm, SubmitButton } from "../../components";
 
 export const metadata = { title: "Configurações" };
 export default async function SettingsPage() {
+  await requireSession();
   await connection();
   const profile = getProfile(getDatabase());
   const ai = aiStatus();

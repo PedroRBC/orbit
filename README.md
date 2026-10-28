@@ -182,7 +182,7 @@ AI_DAILY_USD_LIMIT=
 
 ## Dados e segurança
 
-SQLite com WAL e migrações versionadas (`data/orbit.db`; `/data` no Docker). Usuário único, sempre com login: senha (scrypt) e código TOTP, ou um código de recuperação. A sessão é um cookie `__Host-` HttpOnly, Secure e SameSite=Strict, válido por 30 dias, com só o hash no banco. **Configurações → Acesso** permite sair deste dispositivo ou de todos; `npm run auth -- setup` troca senha e autenticador e encerra todas as sessões; `npm run auth -- logout-all` só encerra as sessões. Erros seguidos bloqueiam novas tentativas por 15 minutos (5 por cliente, 20 no total).
+SQLite com WAL e migrações versionadas (`data/orbit.db`; `/data` no Docker). Usuário único, sempre com login: senha (scrypt) e código TOTP, ou um código de recuperação. A sessão é um cookie `__Host-` HttpOnly, Secure e SameSite=Strict, válido por 30 dias, com só o hash no banco. **Configurações → Acesso** permite sair deste dispositivo ou de todos; `npm run auth -- setup` troca senha e autenticador e encerra todas as sessões; `npm run auth -- logout-all` só encerra as sessões. Cinco erros seguidos bloqueiam aquele cliente (último endereço do `X-Forwarded-For`) por 15 minutos; não há bloqueio global, e `npm run auth -- unlock` limpa os bloqueios.
 
 Fora de localhost, o login só acontece por HTTPS: publique o Orbit atrás de um proxy reverso (Tailscale Serve, Nginx Proxy Manager, Caddy etc.) que preserve o `Host` e envie `X-Forwarded-Proto: https`. Liste o endereço em `ORBIT_ALLOWED_HOSTS`; outros Hosts recebem 403, o que impede DNS rebinding. Requisições de mutação de outra origem são recusadas, e cada Server Action valida a sessão por conta própria.
 

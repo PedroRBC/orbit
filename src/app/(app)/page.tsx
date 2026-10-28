@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireSession } from "../../lib/session";
 import { connection } from "next/server";
 import { and, desc, eq, gte, ne, sql } from "drizzle-orm";
 import { ArrowRight, Check, Play, SlidersHorizontal, Sparkles, Radio, MessageSquare } from "lucide-react";
@@ -13,6 +14,7 @@ import { aiStatus } from "../../lib/config";
 import { CollectButton, FeedbackControls, TrackedLink, WorkRefresh, ExternalMark } from "../components";
 
 export default async function Home({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await requireSession();
   await connection();
   const db = getDatabase();
   const profile = getProfile(db);

@@ -1,4 +1,5 @@
 import { connection } from "next/server";
+import { requireSession } from "../../../lib/session";
 import Link from "next/link";
 import { connectionStatus } from "../../../lib/extension";
 import { sql } from "drizzle-orm";
@@ -19,6 +20,7 @@ function LastRun({ run }: { run?: Run }) {
 
 export const metadata = { title: "Fontes" };
 export default async function SourcesPage() {
+  await requireSession();
   await connection();
   const db = getDatabase();
   const all = db.select().from(sources).all();
