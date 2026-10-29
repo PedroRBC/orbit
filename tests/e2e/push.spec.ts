@@ -220,11 +220,12 @@ test("não reconsulta se sair antes da resposta do teste de notificação", asyn
       Object.defineProperty(Notification, "permission", { get: () => "granted" });
       PushManager.prototype.getSubscription = async () => ({ endpoint } as PushSubscription);
     }, endpoint);
-    let delaying = false, responseReady = false, actions = 0;
+    let delaying = false, responseReady = false, actions = 0, delayedAction = "";
     page.on("request", request => { if (request.headers()["next-action"]) actions++; });
     await page.route("**/configuracoes", async route => {
       if (route.request().method() !== "POST" || !delaying) return route.continue();
       delaying = false;
+      delayedAction = route.request().headers()["next-action"];
       const response = await route.fetch();
       responseReady = true;
       await released;
@@ -241,17 +242,17 @@ test("não reconsulta se sair antes da resposta do teste de notificação", asyn
     await page.getByRole("link", { name: "Hoje", exact: true }).click();
     await expect(page).toHaveURL("/");
     await expect(panel).toHaveCount(0);
-    const completed = page.waitForResponse(response => response.request().headers()["next-action"] !== undefined);
+    await page.clock.resume();
+    const completed = page.waitForResponse(response => response.request().headers()["next-action"] === delayedAction);
     release();
-    await (await completed).finished();
-    await page.waitForLoadState("networkidle");
+    expect((await completed).status()).toBe(200);
     const afterLeaving = actions;
     await page.clock.fastForward(5_000);
-    await page.waitForLoadState("networkidle");
     expect(actions).toBe(afterLeaving);
     await page.clock.fastForward(15_000);
-    await page.waitForLoadState("networkidle");
     expect(actions).toBe(afterLeaving);
+    await expect(page).toHaveURL("/");
+    await expect(panel).toHaveCount(0);
   } finally {
     release();
     db.delete(pushDeliveries).where(eq(pushDeliveries.subscriptionId, id)).run();
