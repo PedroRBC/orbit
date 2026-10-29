@@ -29,9 +29,9 @@ async function ask(question: string, hidden = false): Promise<string> {
 try {
   if (command === "setup") {
     if (authConfigured(db) && (await ask("Já existe acesso configurado. Substituir e encerrar todas as sessões? (s/N) ")).trim().toLowerCase() !== "s") throw new Error("Nada foi alterado.");
-    const password = await ask("Nova senha (mínimo 12 caracteres): ", true);
+    const password = await ask("Nova senha (mínimo 8 caracteres): ", true);
     if (password !== await ask("Repita a senha: ", true)) throw new Error("As senhas não conferem. Nada foi alterado.");
-    if (password.length < 12) throw new Error("Use pelo menos 12 caracteres. Nada foi alterado.");
+    if (password.length < 8) throw new Error("Use pelo menos 8 caracteres. Nada foi alterado.");
     const secret = newTotpSecret();
     console.log(`\nNo app autenticador, adicione uma conta pela chave (TOTP, 6 dígitos, 30 s):\n\n  ${secret.match(/.{1,4}/g)!.join(" ")}\n\nOu use este endereço: ${totpURI(secret)}\n`);
     const step = Math.floor(Date.now() / 30_000);

@@ -49,7 +49,7 @@ function credentials(db: OrbitDB): Credentials | null { const value = getSetting
 export function authConfigured(db: OrbitDB) { return credentials(db) !== null; }
 // lastStep: passo TOTP já usado para confirmar o setup, que não pode servir para entrar.
 export function configureCredentials(db: OrbitDB, password: string, secret: string, lastStep = 0): string[] {
-  if (password.length < 12 || password.length > 1024) throw new Error("Use uma senha entre 12 e 1024 caracteres.");
+  if (password.length < 8 || password.length > 1024) throw new Error("Use uma senha entre 12 e 1024 caracteres.");
   fromBase32(secret);
   const recovery = Array.from({ length: 8 }, () => base32(randomBytes(10)).match(/.{4}/g)!.join("-"));
   const stored: Credentials = { password: hashPassword(password), totp: secret, recovery: recovery.map(code => sha256(code.replaceAll("-", ""))), lastStep };
