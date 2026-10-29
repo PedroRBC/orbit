@@ -2,11 +2,11 @@
 
 Um contêiner roda a interface, o worker e as migrações. O banco SQLite (modo WAL) fica num volume persistente; IA, contato Push e padrões de coleta/agenda podem ficar em arquivo separado, fora da imagem e do Compose.
 
-## Evolução em desenvolvimento — ainda não publicada
+## Versão 0.2.3
 
-As instruções de leitura ampliada de `orbit.env`, diagnóstico, temas automáticos e briefings sob demanda descrevem a worktree atual, **não a imagem `0.2.2`**, que permanece fixada no YAML. Não houve nova versão, publicação ou instalação no NAS nesta etapa. Na `0.2.2`, `orbit.env` ainda lê só `AI_*` e o contato Push precisa estar no ambiente. Veja a [especificação desta evolução](superpowers/specs/2026-10-28-briefings-push-themes-design.md).
+A versão `0.2.3` inclui leitura ampliada de `orbit.env`, diagnóstico, temas automáticos e briefings sob demanda. A publicação por tag depende da CI; não instala nem altera o NAS. Veja a [especificação](superpowers/specs/2026-10-28-briefings-push-themes-design.md).
 
-Antes de usar um futuro build desta evolução com banco real, faça **backup online verificado anterior à consolidação de catálogo v2**. Downgrade à imagem `0.2.2` exige restaurar esse backup; trocar apenas a tag não reverte o banco.
+Antes de atualizar um banco real, faça **backup online verificado anterior à consolidação de catálogo v2**. Downgrade à imagem `0.2.2` exige restaurar esse backup; trocar apenas a tag não reverte o banco.
 
 O acesso é sempre protegido por senha e código TOTP. Fora de `localhost`, o login só acontece por HTTPS, através de um proxy reverso escolhido por você.
 
@@ -79,7 +79,7 @@ Para CliProxyApi OpenAI Compatible na rede do NAS, configure `AI_PROTOCOL=openai
 ```yaml
 services:
   orbit:
-    image: ghcr.io/pedrorbc/orbit:0.2.2
+    image: ghcr.io/pedrorbc/orbit:0.2.3
     init: true
     restart: unless-stopped
     stop_grace_period: 30s
@@ -97,8 +97,8 @@ services:
       COLLECTOR_TIMEZONE: America/Sao_Paulo
       # Endereços pelos quais você abre o Orbit, separados por vírgula.
       ORBIT_ALLOWED_HOSTS: orbit.seudominio.com
-      # Contato VAPID; preencha aqui ou em orbit.env no futuro build desta evolução.
-      # Na imagem 0.2.2, precisa estar aqui. Não use o exemplo como contato real.
+      # Contato VAPID; preencha aqui ou em orbit.env na versão 0.2.3.
+      # Não use o exemplo como contato real.
       ORBIT_PUSH_SUBJECT: mailto:seu-email@seu-dominio.com
     volumes:
       - /mnt/Configs/Apps/orbit/data:/data
@@ -173,7 +173,7 @@ Ao atualizar o Orbit, baixe a extensão de novo, substitua os arquivos da pasta 
 
 ## Variáveis
 
-A tabela descreve a implementação em desenvolvimento; na imagem `0.2.2`, só `AI_*` é lido de `orbit.env`. Os demais valores vão em `environment:` do YAML quando não estiverem no arquivo permitido. Nunca coloque chave de IA no YAML.
+A tabela descreve a versão `0.2.3`, com leitura ampliada de `orbit.env`. Os demais valores vão em `environment:` do YAML quando não estiverem no arquivo permitido. Nunca coloque chave de IA no YAML.
 
 | Variável | Padrão | Pode ir no orbit.env | Uso |
 | --- | --- | --- | --- |
@@ -230,7 +230,7 @@ Mova os arquivos `-wal`/`-shm` antigos junto com o banco. Um WAL antigo ao lado 
 ## Atualização
 
 1. Faça um **backup online verificado antes da atualização** (item 1 acima) e guarde também a configuração em local protegido. A v2 do catálogo tem marcador/transação próprios além das migrations; depois dela, voltar à `0.2.2` exige esse backup anterior.
-2. No YAML do app, troque a tag da imagem para a nova versão (`0.2.2`, ou `sha-<commit curto>` para fixar um build exato). Evite `latest`: dificulta saber o que está rodando e voltar atrás.
+2. No YAML do app, troque a tag da imagem para a nova versão (`0.2.3`, ou `sha-<commit curto>` para fixar um build exato). Evite `latest`: dificulta saber o que está rodando e voltar atrás.
 3. **Update/Save.** O TrueNAS recria o contêiner. O worker antigo libera o lease ao receber SIGTERM, e o novo aplica as migrações pendentes uma única vez antes de iniciar interface e worker.
 
 Uma coleta em andamento durante a atualização é marcada como interrompida e repetida pelo novo worker, sem duplicar itens. Se o processo morrer sem SIGTERM, o novo worker espera até 60 s o lease antigo vencer.
@@ -257,7 +257,7 @@ O workflow `.github/workflows/ci.yml` roda testes, typecheck, build e e2e em PRs
 
 Use a versão ou o `sha-` no TrueNAS, nunca só `latest`. O `sha-` identifica exatamente o commit; a imagem também traz os labels `org.opencontainers.image.version` e `.revision`.
 
-O YAML deste guia fixa `0.2.2`. O [pacote é privado](https://github.com/users/PedroRBC/packages/container/package/orbit); acessar o link e baixar a imagem exigem autenticação. A CI da tag precisa concluir antes de instalar.
+O YAML deste guia fixa `0.2.3`. O [pacote é privado](https://github.com/users/PedroRBC/packages/container/package/orbit); acessar o link e baixar a imagem exigem autenticação. A CI da tag precisa concluir antes de instalar.
 
 Todo lançamento estável por tag (ex.: `v0.2.1`) publica `ghcr.io/pedrorbc/orbit:<versão>`, `:sha-<commit curto>` e move `latest` para ele; candidatos com `-` (ex.: `-rc.1`) nunca recebem `latest`. Push na main também move `latest`. Para uma atualização controlada no NAS, mantenha a versão fixa ou copie o digest do resumo da [publicação aprovada](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml):
 

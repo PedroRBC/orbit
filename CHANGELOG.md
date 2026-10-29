@@ -1,6 +1,6 @@
 # Changelog
 
-## Não publicado
+## 0.2.3 — 2026-10-29
 
 ### Adicionado
 
@@ -21,7 +21,7 @@
 ### Atualização e limites
 
 - Faça backup verificado **antes** da consolidação de catálogo v2. Voltar para a imagem `0.2.2` exige restaurar esse backup; trocar apenas a imagem não basta.
-- Sem mudança de versão, dependências ou imagem padrão; sem commit, publicação, merge ou alteração no NAS nesta etapa. Testes físicos Android/NAS e envio real de Push permanecem pendentes; o roteiro está em `docs/push.md`.
+- Lançamento por tag `v0.2.3` no GHCR privado existente, com `0.2.3`, `sha-<commit>` e `latest`, condicionado à CI e à verificação do registry. Sem merge na main ou alteração no NAS. Testes físicos Android/NAS e envio real de Push permanecem pendentes; o roteiro está em `docs/push.md`.
 
 ## 0.2.2 — 2026-10-28
 
