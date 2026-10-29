@@ -32,6 +32,17 @@ jobs:
       - run: npm run test:e2e
         env:
           E2E_PRODUCTION: "1"
+      - name: Preserve E2E failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-diagnostics
+          path: |
+            test-results/**/trace.zip
+            test-results/**/error-context.md
+            test-results/**/*.png
+          retention-days: 7
+          if-no-files-found: ignore
 
   image:
     needs: test

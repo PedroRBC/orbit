@@ -335,6 +335,8 @@ for (const leave of [false, true]) {
       const afterFiveSeconds = actions;
       if (leave) {
         await page.getByRole("link", { name: "Hoje", exact: true }).click();
+        await expect(page).toHaveURL("/");
+        await expect(panel).toHaveCount(0);
         await page.clock.fastForward(15_000);
         expect(actions).toBe(afterFiveSeconds);
       } else {
