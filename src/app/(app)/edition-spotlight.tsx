@@ -4,7 +4,7 @@ import { ArrowRight } from "lucide-react";
 import type { OrbitDB } from "../../db/index";
 import { editions } from "../../db/schema";
 import { editionLabel, editionTime, readEditionSchedule } from "../../lib/editions";
-import { WorkRefresh } from "../components";
+import { GeneralBriefingButton, WorkRefresh } from "../components";
 
 export function EditionSpotlight({ db }: { db: OrbitDB }) {
   const latest = db.select().from(editions).orderBy(desc(editions.scheduledAt), desc(editions.id)).get();
@@ -14,8 +14,9 @@ export function EditionSpotlight({ db }: { db: OrbitDB }) {
   return <section className="edition-spotlight" aria-labelledby="general-briefing-title">
     <WorkRefresh active={active}/>
     <div className="section-heading"><div><h2 id="general-briefing-title">Brasil e mundo</h2><p>Briefing geral · 08h e 16h · {schedule.timezone}</p></div><Link href="/briefings" className="text-link">Arquivo de edições<ArrowRight size={16} aria-hidden="true"/></Link></div>
+    <GeneralBriefingButton/>
     {published?.content ? <>
-      <p className="edition-meta">{editionLabel(published.edition)} · fechamento {editionTime(published.windowTo, published.timezone)}</p>
+      <p className="edition-meta">{editionLabel(published.edition)} · {published.edition === "manual" ? `Gerada em ${editionTime(published.generatedAt ?? published.windowTo, published.timezone)}` : `fechamento ${editionTime(published.windowTo, published.timezone)}`}</p>
       {Date.now() - published.windowTo > 86400000 && <p className="warning-text">Esta é uma edição anterior, não um panorama de hoje.</p>}
       <p>{published.content.introduction}</p>
       <Link href={`/briefings/${published.id}`} className="button secondary">Ler edição<ArrowRight size={16} aria-hidden="true"/></Link>

@@ -1,5 +1,7 @@
 # Orbit editorial, temas e edições gerais
 
+> Nota de substituição (28/10/2026): a [especificação de notificações, briefings e temas](2026-10-28-briefings-push-themes-design.md) substitui o catálogo fechado de oito temas por oito sementes e temas automáticos (três itens pessoais distintos, teto de 40), e permite até três notícias RSS externas identificadas como complemento do briefing pessoal. Acrescenta também configuração reconhecida, contato Push no arquivo e briefings sob demanda. As recomendações pessoais continuam sem RSS. Este documento preserva o desenho histórico; essas mudanças estão em desenvolvimento, sem nova versão ou publicação nesta etapa.
+
 ## Autorização e limites
 
 Implementação autorizada pelo objetivo desta sessão em 28/10/2026: interface profissional, taxonomia controlada, edições gerais às 08h/16h e Web Push. Continuar o serviço privado de uma pessoa, com login, PWA e Docker existentes. Não fazer commit, push, publicação, merge ou alterações no TrueNAS. Alterações locais do checkout principal permanecem intocadas; trabalho em worktree `orbit-editorial`.

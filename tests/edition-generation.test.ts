@@ -16,9 +16,9 @@ afterEach(async () => {
 });
 const base = { localDate: "2026-10-28", edition: "morning" as const, timezone: "America/Sao_Paulo", scheduledAt: Date.parse("2026-10-28T11:00Z"), windowFrom: Date.parse("2026-10-27T11:00Z"), windowTo: Date.parse("2026-10-28T11:00Z"), createdAt: 1 };
 const content = { introduction: "Panorama sintético restrito aos RSS fornecidos.", highlights: [{ title: "Destaque sintético", summary: "O RSS relata um acontecimento de teste.", context: "O texto disponível é um trecho RSS, não a reportagem integral.", relevance: "Permite acompanhar uma mudança descrita pela fonte.", itemIds: ["news:new"] }] };
-function setup() {
+function setup(manual = false) {
   const db = openDatabase(":memory:"); databases.push(db);
-  const edition = db.insert(editions).values({ ...base, slot: "fixture-morning" }).returning().get();
+  const edition = db.insert(editions).values({ ...base, edition: manual ? "manual" : "morning", slot: "fixture-morning" }).returning().get();
   const run = db.insert(collectorRuns).values({ kind: "edition", editionId: edition.id, status: "running", startedAt: 1 }).returning().get();
   const source = db.insert(sources).values({ channelId: "https://news.example.com/rss", name: "Portal sintético", kind: "news_rss", platform: "news" }).returning().get();
   const item = (externalId: string, publishedAt: number | null) => ({ externalId, platform: "news" as const, evidence: "news_rss" as const, title: `Notícia sintética ${externalId}`, text: "Trecho original sintético.", author: "Portal", url: `https://news.example.com/${externalId}`, thumbnail: null, durationSeconds: null, publishedAt, newsPublishedAt: publishedAt });
@@ -27,6 +27,30 @@ function setup() {
 }
 
 describe("edições ancoradas em RSS públicos", () => {
+  it("manual sem notícias novas não chama IA e não aplica limite de atraso", async () => {
+    const { db, edition, run } = setup(true);
+    db.insert(editions).values({ ...base, slot: "previous", status: "published", itemIds: ["news:new"] }).run();
+    const config = getAIConfig({ AI_BASE_URL: "http://127.0.0.1:1/v1", AI_API_KEY: "fixture", AI_MODEL: "fixture" })!;
+    await runEdition(db, run.id, config, { collect: async () => [], now: base.scheduledAt + 3 * 3600000 });
+    expect(db.select().from(editions).where(eq(editions.id, edition.id)).get()).toMatchObject({ status: "unavailable", notice: expect.stringContaining("Nenhuma notícia datada nova") });
+    expect(db.select().from(aiCalls).all()).toEqual([]);
+  });
+  it("manual exclui IDs e manchetes de qualquer edição publicada nas últimas 24 horas", () => {
+    const { db, edition, source } = setup(true);
+    saveRawItems(db, source.id, [{ externalId: "reprint", platform: "news", evidence: "news_rss", title: "NOTÍCIA sintética new!", text: "Trecho sintético", author: "Portal", url: "https://news.example.com/reprint", thumbnail: null, durationSeconds: null, publishedAt: base.windowTo - 1, newsPublishedAt: base.windowTo - 1 }]);
+    const previous = db.insert(editions).values({ ...base, edition: "afternoon", slot: "previous", status: "published", windowTo: edition.windowFrom + 1, itemIds: ["news:new"] }).returning().get();
+    expect(editionCandidates(db, edition).items).toEqual([]);
+    expect(editionCandidates(db, edition).morning).toBeNull();
+    db.update(editions).set({ windowTo: edition.windowFrom }).where(eq(editions.id, previous.id)).run();
+    expect(editionCandidates(db, edition).items).toHaveLength(1);
+  });
+  it("tarde exclui todas as manuais do dia sem usá-las como contexto da manhã", () => {
+    const { db, edition } = setup(true);
+    db.update(editions).set({ status: "published", itemIds: ["news:new", "news:future"], content }).where(eq(editions.id, edition.id)).run();
+    const afternoon = db.insert(editions).values({ ...base, edition: "afternoon", slot: "afternoon", windowTo: base.windowTo + 8 * 3600000 }).returning().get();
+    expect(editionCandidates(db, afternoon).items).toEqual([]);
+    expect(editionCandidates(db, afternoon).morning).toBeNull();
+  });
   it("exige IDs válidos sem duplicatas e conteúdo editorial completo", () => {
     expect(validateEdition(JSON.stringify(content), ["news:new"])).toEqual(content);
     expect(() => validateEdition(JSON.stringify(content), ["news:invented"])).toThrow();
@@ -66,8 +90,8 @@ describe("edições ancoradas em RSS públicos", () => {
     expect(editionCandidates(db, afternoon).items.map(item => item.id)).toEqual(["news:future"]);
     expect(editionCandidates(db, afternoon).morning).toMatchObject({ introduction: content.introduction });
   });
-  it("publica, preserva orçamento e cache por edição sem chamar rede de novo", async () => {
-    const { db, edition, run } = setup();
+  it.each([false, true])("publica e preserva cache; envia push só para edição automática (manual=%s)", async manual => {
+    const { db, edition, run } = setup(manual);
     db.insert(pushSubscriptions).values({ id: "fixture-subscription", endpoint: "https://fcm.googleapis.com/fcm/send/fixture", p256dh: "fixture", auth: "fixture", createdAt: 1 }).run();
     let calls = 0;
     const server = createServer(async (req, res) => {
@@ -85,7 +109,7 @@ describe("edições ancoradas em RSS públicos", () => {
     await runEdition(db, run.id, config, { collect, now: base.windowTo });
     await runEdition(db, run.id, config, { collect, now: base.windowTo });
     expect(calls).toBe(1);
-    expect(db.select().from(pushDeliveries).all()).toMatchObject([{ editionId: edition.id, subscriptionId: "fixture-subscription", status: "queued" }]);
+    expect(db.select().from(pushDeliveries).all()).toMatchObject(manual ? [] : [{ editionId: edition.id, subscriptionId: "fixture-subscription", status: "queued" }]);
     expect(db.select().from(editions).where(eq(editions.id, edition.id)).get()).toMatchObject({ status: "published", content, itemIds: ["news:new"], attempts: 1 });
     expect(db.select().from(collectorRuns).where(eq(collectorRuns.id, run.id)).get()?.status).toBe("completed");
   });
@@ -111,6 +135,15 @@ describe("edições ancoradas em RSS públicos", () => {
     await runEdition(db, run.id, config, { collect: async () => [], now: base.windowTo });
     expect(db.select().from(editions).get()).toMatchObject({ status: "error", content: null, itemIds: [] });
     expect(db.select().from(aiCalls).all()).toHaveLength(2);
+    expect(db.select().from(pushDeliveries).all()).toEqual([]);
+  });
+  it("preserva o motivo de configuração recebido sem inventar edição", async () => {
+    const { db, run } = setup();
+    const briefingNotice = "Configure AI_BASE_URL para gerar briefings.";
+    await runEdition(db, run.id, null, { collect: async () => [], now: base.windowTo, briefingNotice });
+    expect(db.select().from(editions).get()).toMatchObject({ status: "unavailable", content: null, notice: briefingNotice });
+    expect(db.select().from(collectorRuns).where(eq(collectorRuns.id, run.id)).get()?.error).toBe(briefingNotice);
+    expect(db.select().from(aiCalls).all()).toEqual([]);
     expect(db.select().from(pushDeliveries).all()).toEqual([]);
   });
   it("sem fontes não inventa edição", async () => {

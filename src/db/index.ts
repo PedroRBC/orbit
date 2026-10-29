@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import * as schema from "./schema";
-import { consolidateTaxonomy } from "./taxonomy";
+import { consolidateTaxonomy, consolidateThemeCatalog } from "./taxonomy";
 
 export function openDatabase(path: string) {
   if (path !== ":memory:") mkdirSync(dirname(resolve(path)), { recursive: true, mode: 0o700 });
@@ -16,6 +16,7 @@ export function openDatabase(path: string) {
   try {
     migrate(db, { migrationsFolder: resolve("drizzle") });
     consolidateTaxonomy(db);
+    consolidateThemeCatalog(db);
     return db;
   } catch (error) { client.close(); throw error; }
 }

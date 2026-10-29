@@ -1,13 +1,13 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { OrbitDB } from "../db/index";
 import { collectorRuns, editions, rawItems, sources, type EditionContent } from "../db/schema";
 import { collectNews } from "../collectors/news";
 import { CollectorError } from "../collectors/errors";
 import type { RawItem } from "../collectors/types";
-import type { AIConfig } from "../lib/config";
+import { briefingProblem, type AIConfig } from "../lib/config";
 import { dailyUsage, saveRawItems } from "../lib/store";
 import { queueEditionPush } from "../lib/push";
 import { estimateRequest, requestWithBudget } from "./request";
@@ -25,14 +25,15 @@ export function validateEdition(text: string, ids: string[]): EditionContent {
 const titleKey = (title: string) => title.normalize("NFKC").toLocaleLowerCase("pt-BR").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 export function editionCandidates(db: OrbitDB, edition: typeof editions.$inferSelect) {
-  const morningEdition = edition.edition === "afternoon" ? db.select().from(editions).where(and(eq(editions.localDate, edition.localDate), eq(editions.timezone, edition.timezone), eq(editions.edition, "morning"), eq(editions.status, "published"))).orderBy(desc(editions.id)).get() : undefined;
-  const morningIds = morningEdition?.itemIds || [];
-  const morningTitles = new Set(morningIds.length ? db.select({ title: rawItems.title }).from(rawItems).where(inArray(rawItems.id, morningIds)).all().map(item => titleKey(item.title)) : []);
+  const previous = edition.edition === "morning" ? [] : db.select().from(editions).where(and(eq(editions.status, "published"), edition.edition === "manual" ? gt(editions.windowTo, edition.windowFrom) : and(eq(editions.localDate, edition.localDate), eq(editions.timezone, edition.timezone), inArray(editions.edition, ["morning", "manual"])))).orderBy(desc(editions.id)).all();
+  const morningEdition = edition.edition === "afternoon" ? previous.find(row => row.edition === "morning") : undefined;
+  const previousIds = previous.flatMap(row => row.itemIds);
+  const previousTitles = new Set(previousIds.length ? db.select({ title: rawItems.title }).from(rawItems).where(inArray(rawItems.id, previousIds)).all().map(item => titleKey(item.title)) : []);
   const rows = db.select().from(rawItems).where(and(eq(rawItems.platform, "news"), eq(rawItems.evidence, "news_rss"), gte(rawItems.newsPublishedAt, edition.windowFrom), lte(rawItems.newsPublishedAt, edition.windowTo), sql`exists (select 1 from source_items si join sources s on s.id = si.sourceId where si.rawId = ${rawItems.id} and s.enabled = 1 and s.kind = 'news_rss' and s.platform = 'news')`)).orderBy(desc(rawItems.newsPublishedAt), rawItems.id).limit(200).all();
-  const titles = new Set(morningTitles);
+  const titles = new Set(previousTitles);
   const available = rows.filter(item => {
     const title = titleKey(item.title);
-    if (morningIds.includes(item.id) || titles.has(title)) return false;
+    if (previousIds.includes(item.id) || titles.has(title)) return false;
     titles.add(title); return true;
   });
   // Distribuir a seleção entre origens evita um único RSS ocupar todos os lugares.
@@ -54,6 +55,7 @@ type EditionControl = {
   signal?: AbortSignal;
   collect?: (url: string, name: string, signal?: AbortSignal) => Promise<RawItem[]>;
   now?: number;
+  briefingNotice?: string;
 };
 export async function runEdition(db: OrbitDB, runId: number, config: AIConfig | null, control: EditionControl = {}) {
   const assertActive = () => { control.signal?.throwIfAborted(); control.assertActive?.(); };
@@ -72,7 +74,7 @@ export async function runEdition(db: OrbitDB, runId: number, config: AIConfig | 
     db.update(collectorRuns).set({ status: "error", finishedAt: control.now ?? Date.now(), error: notice }).where(eq(collectorRuns.id, runId)).run();
   });
   if (edition.attempts >= 2) { finish("error", "Esta edição já foi retomada duas vezes. Aguarde a próxima edição; não haverá repetição automática de chamadas."); return; }
-  if ((control.now ?? Date.now()) - edition.scheduledAt > 2 * 3600000) { finish("unavailable", "Edição não gerada: o atraso ultrapassou duas horas. Aguarde o próximo horário para não receber um panorama velho como atual."); return; }
+  if (edition.edition !== "manual" && (control.now ?? Date.now()) - edition.scheduledAt > 2 * 3600000) { finish("unavailable", "Edição não gerada: o atraso ultrapassou duas horas. Aguarde o próximo horário para não receber um panorama velho como atual."); return; }
   owned(() => db.update(editions).set({ status: "running", attempts: edition.attempts + 1 }).where(eq(editions.id, edition.id)).run());
   const feeds = db.select().from(sources).where(and(eq(sources.enabled, true), eq(sources.kind, "news_rss"), eq(sources.platform, "news"))).all();
   if (!feeds.length) { finish("unavailable", "Adicione e ative fontes RSS públicas em Fontes. O briefing geral não usa a extensão nem presume portais."); return; }
@@ -97,8 +99,8 @@ export async function runEdition(db: OrbitDB, runId: number, config: AIConfig | 
     }
   }
   const candidates = editionCandidates(db, edition);
-  if (!candidates.items.length) { finish("unavailable", edition.edition === "afternoon" ? "Nenhuma novidade com data válida desde 08h nas fontes configuradas. A edição da manhã continua no arquivo." : "Nenhuma notícia com data válida no período. Confira os RSS; itens antigos, sem data ou posteriores ao fechamento não viram notícias atuais."); return; }
-  if (!config) { finish("unavailable", "Configure AI_BRIEFING_MODEL e o endpoint de IA no servidor. Os RSS foram coletados, mas nenhum resumo foi inventado."); return; }
+  if (!candidates.items.length) { finish("unavailable", edition.edition === "manual" ? "Nenhuma notícia datada nova nas últimas 24 horas. As edições anteriores continuam no arquivo." : edition.edition === "afternoon" ? "Nenhuma novidade com data válida desde 08h nas fontes configuradas. A edição da manhã continua no arquivo." : "Nenhuma notícia com data válida no período. Confira os RSS; itens antigos, sem data ou posteriores ao fechamento não viram notícias atuais."); return; }
+  if (!config) { finish("unavailable", control.briefingNotice || briefingProblem() || "Modelo de briefing indisponível para esta execução."); return; }
   try {
     const prompt = readFileSync(resolve("prompts/edition.md"), "utf8");
     const payload = (items: typeof candidates.items) => JSON.stringify({ edition: edition.edition, timezone: edition.timezone, windowFrom: new Date(edition.windowFrom).toISOString(), windowTo: new Date(edition.windowTo).toISOString(), morning: candidates.morning ? { introduction: candidates.morning.introduction.slice(0, 1000), highlights: candidates.morning.highlights.map(item => ({ title: item.title, summary: item.summary.slice(0, 500) })) } : null, items: items.map(item => ({ id: item.id, title: item.title, description: item.text.slice(0, 6000), author: item.author, publishedAt: new Date(item.newsPublishedAt!).toISOString(), evidence: "Somente título e trecho de RSS público, não reportagem integral" })) });
@@ -121,7 +123,7 @@ export async function runEdition(db: OrbitDB, runId: number, config: AIConfig | 
     const itemIds = valid.highlights.flatMap(item => item.itemIds);
     owned(() => {
       db.update(editions).set({ status: "published", content: valid, itemIds, generatedAt: control.now ?? Date.now(), model: config.model, sourceCount: itemIds.length, candidateCount: candidates.candidateCount, budgetLimited: selected.length < candidates.items.length, notice: failures ? `${failures} fonte(s) não puderam ser atualizadas. Esta edição usa somente notícias datadas disponíveis no período.` : null }).where(eq(editions.id, edition.id)).run();
-      queueEditionPush(db, edition.id);
+      if (edition.edition !== "manual") queueEditionPush(db, edition.id);
       db.update(collectorRuns).set({ status: "completed", finishedAt: control.now ?? Date.now(), itemCount: itemIds.length, error: null }).where(eq(collectorRuns.id, runId)).run();
     });
   } catch (error) {

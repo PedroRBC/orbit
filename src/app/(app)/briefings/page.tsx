@@ -6,7 +6,7 @@ import { requireSession } from "../../../lib/session";
 import { getDatabase } from "../../../db/index";
 import { editions } from "../../../db/schema";
 import { editionLabel, editionTime, readEditionSchedule } from "../../../lib/editions";
-import { WorkRefresh } from "../../components";
+import { GeneralBriefingButton, WorkRefresh } from "../../components";
 
 export const metadata = { title: "Briefings gerais" };
 export default async function EditionsPage({ searchParams }: { searchParams: Promise<{ antes?: string }> }) {
@@ -19,7 +19,7 @@ export default async function EditionsPage({ searchParams }: { searchParams: Pro
   const schedule = readEditionSchedule(db);
   return <>
     <WorkRefresh active={rows.some(row => row.status === "queued" || row.status === "running")}/>
-    <div className="page-heading"><div><h1>Briefings gerais</h1><p>Brasil e mundo, a partir das fontes públicas que você escolheu.</p></div></div>
+    <div className="page-heading"><div><h1>Briefings gerais</h1><p>Brasil e mundo, a partir das fontes públicas que você escolheu.</p></div><GeneralBriefingButton/></div>
     <div className="edition-header"><p>Dois fechamentos por dia: <strong>08h e 16h</strong> · {schedule.timezone}</p><p className="field-help">{schedule.needsTimezone ? "Proposta de fuso: America/Sao_Paulo. Confirme nas configurações para ativar." : schedule.enabled ? "A manhã traz o panorama; a tarde prioriza novidades desde 08h." : "Agenda pausada. O arquivo foi preservado."} <Link href="/configuracoes#edicoes">Configurar agenda e notificações</Link></p></div>
     {rows.length ? <div className="edition-list">{rows.map(row => <section key={row.id}>
       <h2><Link href={`/briefings/${row.id}`} className="edition-link">{editionLabel(row.edition)}<ArrowRight size={20} aria-hidden="true"/></Link></h2>

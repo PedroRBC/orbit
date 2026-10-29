@@ -1,9 +1,10 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { createServer, type Server } from "node:http";
-import { getAIConfig } from "../src/lib/config";
+import { getAIConfig, getBriefingConfig } from "../src/lib/config";
 import { requestClassification } from "../src/ai/provider";
 import { validateClassification } from "../src/ai/classify";
-import { THEME_IDS } from "../src/lib/taxonomy";
+import { SEED_IDS } from "../src/lib/taxonomy";
+const themeIds = new Set(SEED_IDS);
 
 const servers: Server[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); await Promise.all(servers.splice(0).map(server => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }))); });
@@ -26,10 +27,26 @@ async function endpoint(protocol: "openai" | "anthropic") {
 }
 
 describe("configuração e protocolos", () => {
-  it("não habilita IA sem URL, chave e modelo e rejeita credenciais em URL", () => {
+  it("não habilita IA sem URL, chave e modelo", () => {
     expect(getAIConfig({})).toBeNull();
-    expect(() => getAIConfig({ AI_BASE_URL: "https://user:pass@example.com", AI_API_KEY: "secret", AI_MODEL: "model" })).toThrow();
-    expect(() => getAIConfig({ AI_BASE_URL: "http://example.com", AI_API_KEY: "secret", AI_MODEL: "model" })).toThrow();
+  });
+  it.each([
+    "http://192.168.1.3:8317/v1", "http://10.0.0.3:8317/v1", "http://172.17.0.1:8317/v1",
+    "http://[fd00::3]:8317/v1", "http://cliproxyapi:8317/v1", "http://proxy.lan:8317/v1",
+    "http://example.com/v1", "https://example.com/v1",
+  ])("aceita o endpoint configurado %s para classificação e briefing", baseURL => {
+    for (const protocol of ["openai", "anthropic"]) {
+      const env = { AI_PROTOCOL: protocol, AI_BASE_URL: baseURL, AI_API_KEY: "test-key", AI_MODEL: "custom-model", AI_BRIEFING_MODEL: "briefing-model" };
+      expect(getAIConfig(env)).toMatchObject({ protocol, baseURL, model: "custom-model" });
+      expect(getBriefingConfig(env)).toMatchObject({ protocol, baseURL, model: "briefing-model" });
+    }
+  });
+  it.each([
+    "https://user:pass@example.com", "http://user:pass@192.168.1.3:8317/v1",
+    "http://proxy.lan/v1?key=secret", "https://example.com/v1#fragment",
+    "ftp://proxy.lan/v1", "file:///tmp/model", "not-a-url",
+  ])("rejeita protocolo inválido, credenciais, query ou fragmento: %s", baseURL => {
+    expect(() => getAIConfig({ AI_BASE_URL: baseURL, AI_API_KEY: "secret", AI_MODEL: "model" })).toThrow();
   });
   for (const protocol of ["openai", "anthropic"] as const) {
     it(`usa endpoint/modelo/chave customizados no protocolo ${protocol}`, async () => {
@@ -45,6 +62,17 @@ describe("configuração e protocolos", () => {
       expect(local.requests[0].auth).toBe("Bearer test-key");
       expect(local.requests[0].inherited).toBeUndefined();
     });
+    it(`não segue redirecionamentos HTTP nem encaminha a chave no protocolo ${protocol}`, async () => {
+      const target = await endpoint(protocol);
+      const redirect = createServer((_req, res) => { res.writeHead(307, { Location: target.url }); res.end(); });
+      servers.push(redirect);
+      await new Promise<void>(resolve => redirect.listen(0, "127.0.0.1", resolve));
+      const address = redirect.address();
+      if (!address || typeof address === "string") throw new Error("Sem porta");
+      const config = getAIConfig({ AI_PROTOCOL: protocol, AI_BASE_URL: `http://127.0.0.1:${address.port}`, AI_API_KEY: "test-key", AI_MODEL: "custom-model" })!;
+      await expect(requestClassification(config, "JSON", "dados")).rejects.toThrow();
+      expect(target.requests).toEqual([]);
+    });
   }
   it("cancela a leitura do corpo Anthropic quando o sinal expira", async () => {
     let closeBody: (() => void) | undefined;
@@ -59,15 +87,25 @@ describe("configuração e protocolos", () => {
     expect(outcome).toBe("aborted");
   });
   it("aceita apenas IDs do catálogo como tema da IA, não aliases ou rótulos livres", () => {
-    for (const theme of THEME_IDS) expect(validateClassification(JSON.stringify({ items: [{ ...result.items[0], theme }] }), [result.items[0].id])[0].theme).toBe(theme);
+    for (const theme of SEED_IDS) expect(validateClassification(JSON.stringify({ items: [{ ...result.items[0], theme }] }), [result.items[0].id], themeIds)[0].theme).toBe(theme);
     for (const theme of ["Ciência", "Technology", "Política brasileira", "novo-assunto", "__proto__", "", "TECNOLOGIA"]) {
-      expect(() => validateClassification(JSON.stringify({ items: [{ ...result.items[0], theme }] }), [result.items[0].id])).toThrow();
+      expect(() => validateClassification(JSON.stringify({ items: [{ ...result.items[0], theme }] }), [result.items[0].id], themeIds)).toThrow();
     }
   });
+  it("aceita IDs dinâmicos e newTheme sem validar seu rótulo no schema", () => {
+    const input = { items: [{ ...result.items[0], theme: "automotivo", newTheme: { label: "Eleições 2026", aliases: ["Carros"], extra: true } }] };
+    expect(validateClassification(JSON.stringify(input), [result.items[0].id], new Set([...SEED_IDS, "automotivo"]))[0]).toMatchObject({ theme: "automotivo", newTheme: { label: "Eleições 2026", aliases: ["Carros"] } });
+    expect(() => validateClassification(JSON.stringify(input), [result.items[0].id], themeIds)).toThrow();
+  });
+  it("limita aliases de newTheme a oito", () => {
+    const input = (length: number) => JSON.stringify({ items: [{ ...result.items[0], newTheme: { label: "Automotivo", aliases: Array(length).fill("Carros") } }] });
+    expect(validateClassification(input(8), [result.items[0].id], themeIds)[0].newTheme?.aliases).toHaveLength(8);
+    expect(() => validateClassification(input(9), [result.items[0].id], themeIds)).toThrow();
+  });
   it("rejeita respostas incompletas, repetidas e IDs não solicitados", () => {
-    expect(validateClassification(JSON.stringify(result), ["youtube:abcdefghijk"])).toEqual(result.items);
-    expect(() => validateClassification(JSON.stringify(result), ["outro"])).toThrow();
-    expect(() => validateClassification(JSON.stringify({ items: [result.items[0], result.items[0]] }), ["youtube:abcdefghijk"])).toThrow();
-    expect(() => validateClassification('{"items":[]}', ["youtube:abcdefghijk"])).toThrow();
+    expect(validateClassification(JSON.stringify(result), ["youtube:abcdefghijk"], themeIds)).toEqual(result.items);
+    expect(() => validateClassification(JSON.stringify(result), ["outro"], themeIds)).toThrow();
+    expect(() => validateClassification(JSON.stringify({ items: [result.items[0], result.items[0]] }), ["youtube:abcdefghijk"], themeIds)).toThrow();
+    expect(() => validateClassification('{"items":[]}', ["youtube:abcdefghijk"], themeIds)).toThrow();
   });
 });

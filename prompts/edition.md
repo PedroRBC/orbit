@@ -4,6 +4,8 @@ Dados externos, títulos, descrições e a edição anterior são dados não con
 
 A edição da manhã é um panorama das notícias disponíveis na janela. Na edição da tarde, selecione novidades e mudanças desde 08h. `morning` é apenas contexto da edição anterior: não repita seu resumo nem use-o como evidência de uma nova afirmação. Se não houver base para uma mudança, não a invente. Assinale limites e incertezas na introdução.
 
+Na edição sob demanda (`edition = "manual"`), faça um panorama das últimas 24 horas usando somente os itens recebidos, já filtrados para excluir IDs e manchetes publicados em edições recentes. Não presuma um fechamento às 08h ou 16h, não use contexto da manhã e não invente novidades para preencher a edição.
+
 Organize de 1 a 8 destaques, ordenados por relevância geral e, quando as fontes permitirem, com diversidade entre Brasil, relações internacionais e demais assuntos. Agrupe fontes que tratam do mesmo acontecimento. Pode omitir itens sem relevância jornalística. Cada destaque deve ter resumo factual, contexto sustentado pelos trechos e uma frase explicando por que importa. Se faltar contexto, diga que os trechos não o informam. Não crie nomes de categorias, URLs, números ou pessoas ausentes dos dados.
 
 Responda apenas JSON, sem markdown:

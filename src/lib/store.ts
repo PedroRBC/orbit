@@ -11,6 +11,15 @@ export function enqueueCollection(db: OrbitDB): number {
   }, { behavior: "immediate" });
 }
 
+export function queueBriefingRefresh(db: OrbitDB, now = Date.now()): "queued" | "active" | "recent" {
+  return db.transaction(() => {
+    if (db.select().from(collectorRuns).where(sql`${collectorRuns.parentId} IS NULL AND ${collectorRuns.kind} = 'briefing' AND ${collectorRuns.status} IN ('queued', 'running')`).get()) return "active";
+    if (db.select().from(collectorRuns).where(sql`${collectorRuns.parentId} IS NULL AND ${collectorRuns.kind} = 'briefing' AND ${collectorRuns.trigger} = 'manual' AND ${collectorRuns.startedAt} > ${now - 300000}`).get()) return "recent";
+    db.insert(collectorRuns).values({ kind: "briefing", trigger: "manual", status: "queued", startedAt: now }).run();
+    return "queued";
+  }, { behavior: "immediate" });
+}
+
 export function claimRun(db: OrbitDB, assertActive: () => void = () => {}) {
   return db.transaction(() => {
     assertActive();

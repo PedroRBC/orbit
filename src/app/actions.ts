@@ -13,10 +13,13 @@ import { validSchedule } from "../lib/scheduler";
 import { setSetting } from "../lib/store";
 import { createPairingCode, revokeExtension } from "../lib/extension";
 import { browserSourceKinds, browserSourceLabels, browserURLs } from "../collectors/types";
-import { enqueueCollection } from "../lib/store";
+import { enqueueCollection, getProfile, queueBriefingRefresh, workerOnline } from "../lib/store";
+import { queueManualEdition } from "../lib/editions";
+import { briefingProblem } from "../lib/config";
 import { revokeAllSessions, revokeSession, sessionCookie } from "../lib/auth";
 import { requireSession } from "../lib/session";
 import { applyFeedback, feedbackAction, updateTopicWeight } from "../lib/feedback";
+import { mergeTheme } from "../lib/themes";
 
 export type ActionResult = { message: string; error?: boolean; code?: string };
 function refresh() { for (const path of ["/", "/briefings", "/fontes", "/configuracoes", "/status", "/perfil", "/temas"]) revalidatePath(path); }
@@ -118,7 +121,7 @@ export async function saveFeedback(_previous: ActionResult, form: FormData): Pro
   try { applyFeedback(getDatabase(), parsed.data.rawId, parsed.data.action); }
   catch { return { error: true, message: "Não foi possível salvar. Confira se o item e seu perfil ainda existem." }; }
   refresh();
-  return { message: "Feedback salvo. Seu perfil e a ordem das recomendações foram atualizados." };
+  return { message: "Feedback salvo." };
 }
 
 export async function recordClick(rawId: string): Promise<void> {
@@ -132,9 +135,45 @@ export async function saveTopicWeight(_previous: ActionResult, form: FormData): 
   const parsed = z.object({ theme: z.string().min(1).max(80), weight: z.coerce.number().finite().min(-20).max(20) }).safeParse({ theme: form.get("theme"), weight: form.get("weight") });
   if (!parsed.success) return { error: true, message: "Use um peso entre -20 e 20, com decimais se necessário." };
   try { updateTopicWeight(getDatabase(), parsed.data.theme, parsed.data.weight); }
-  catch { return { error: true, message: "Configure seu perfil antes de ajustar os pesos." }; }
+  catch (error) { return { error: true, message: error instanceof Error && error.message === "Escolha um tema do catálogo da taxonomia." ? "Tema não encontrado no catálogo." : "Configure seu perfil antes de ajustar os pesos." }; }
   refresh();
   return { message: "Peso atualizado. Você continua no controle das preferências." };
+}
+
+export async function mergeThemeAction(_prev: ActionResult, form: FormData): Promise<ActionResult> {
+  await requireSession();
+  const parsed = z.object({ from: z.string().min(1).max(40), into: z.string().min(1).max(40) }).safeParse({ from: form.get("from"), into: form.get("into") });
+  if (!parsed.success) return { error: true, message: "Escolha os temas de origem e destino no catálogo." };
+  const db = getDatabase();
+  try { db.transaction(() => mergeTheme(db, parsed.data.from, parsed.data.into), { behavior: "immediate" }); }
+  catch { return { error: true, message: "Não foi possível juntar. Escolha um tema criado e outro tema existente." }; }
+  refresh();
+  return { message: "Temas juntados. Itens, pesos e aliases foram preservados no destino." };
+}
+
+export async function requestPersonalBriefing(): Promise<ActionResult> {
+  await requireSession();
+  const db = getDatabase();
+  if (!getProfile(db)?.interests.trim()) return { error: true, message: "Configure seus interesses antes de atualizar o briefing pessoal." };
+  const problem = briefingProblem();
+  if (problem) return { error: true, message: problem };
+  const result = queueBriefingRefresh(db);
+  if (result === "active") return { error: true, message: "Já existe uma atualização do briefing pessoal na fila ou em andamento." };
+  if (result === "recent") return { error: true, message: "Aguarde cinco minutos entre pedidos de briefing pessoal." };
+  refresh();
+  return { message: `Briefing pessoal na fila. ${workerOnline(db) ? "Worker online." : "O worker está sem sinal recente; o pedido aguarda sua volta."} Usa o orçamento diário de IA compartilhado.` };
+}
+
+export async function requestGeneralBriefing(): Promise<ActionResult> {
+  await requireSession();
+  const db = getDatabase(), problem = briefingProblem();
+  if (problem) return { error: true, message: problem };
+  const result = queueManualEdition(db);
+  if (result === "timezone") return { error: true, message: "Confirme o fuso das edições em Configurações antes de gerar um briefing geral." };
+  if (result === "active") return { error: true, message: "Já existe uma edição geral na fila ou em preparação." };
+  if (result === "recent") return { error: true, message: "Aguarde cinco minutos entre pedidos de briefing geral." };
+  refresh();
+  return { message: `Briefing geral na fila. ${workerOnline(db) ? "Worker online." : "O worker está sem sinal recente; o pedido aguarda sua volta."} Usa o orçamento diário de IA compartilhado.` };
 }
 
 export async function requestCollection(): Promise<ActionResult> {

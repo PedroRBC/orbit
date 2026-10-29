@@ -1,10 +1,20 @@
 # Orbit no Docker e no TrueNAS
 
-Um contêiner roda a interface, o worker e as migrações. O banco SQLite (modo WAL) fica num volume persistente; a configuração de IA fica num arquivo separado, fora da imagem e fora do Compose.
+Um contêiner roda a interface, o worker e as migrações. O banco SQLite (modo WAL) fica num volume persistente; IA, contato Push e padrões de coleta/agenda podem ficar em arquivo separado, fora da imagem e do Compose.
+
+## Evolução em desenvolvimento — ainda não publicada
+
+As instruções de leitura ampliada de `orbit.env`, diagnóstico, temas automáticos e briefings sob demanda descrevem a worktree atual, **não a imagem `0.2.2`**, que permanece fixada no YAML. Não houve nova versão, publicação ou instalação no NAS nesta etapa. Na `0.2.2`, `orbit.env` ainda lê só `AI_*` e o contato Push precisa estar no ambiente. Veja a [especificação desta evolução](superpowers/specs/2026-10-28-briefings-push-themes-design.md).
+
+Antes de usar um futuro build desta evolução com banco real, faça **backup online verificado anterior à consolidação de catálogo v2**. Downgrade à imagem `0.2.2` exige restaurar esse backup; trocar apenas a tag não reverte o banco.
 
 O acesso é sempre protegido por senha e código TOTP. Fora de `localhost`, o login só acontece por HTTPS, através de um proxy reverso escolhido por você.
 
-## Evolução editorial na versão 0.2.1
+## Correção de conexão na versão 0.2.2
+
+`AI_BASE_URL` aceita HTTP e HTTPS, inclusive IP da LAN ou nome de serviço Docker, sem flag adicional. A tag estável `v0.2.2` publica `0.2.2` e `latest` no destino privado existente, após a CI concluir. Esta correção não altera banco, extensão nem a exigência de HTTPS para login. Instalar/atualizar o app no NAS continua sendo uma ação separada.
+
+## Evolução editorial desde a versão 0.2.1
 
 A versão `0.2.1` inclui temas controlados, briefings gerais 08h/16h e Web Push. A publicação foi autorizada pelo usuário para o destino privado existente; considere a imagem disponível somente depois da CI da tag `v0.2.1` concluir todas as verificações. A imagem anterior `0.2.0` não contém esses recursos. Instalação e alterações no TrueNAS continuam exigindo autorização própria.
 
@@ -12,7 +22,7 @@ Antes de atualizar para esta versão, faça backup online verificado antes da mi
 
 Briefings gerais usam o fuso salvo em Configurações ou o `COLLECTOR_TIMEZONE` explícito, com fechamentos 08h e 16h. Coletam somente RSS públicos no servidor, sem extensão. Sem fuso configurado, a interface propõe `America/Sao_Paulo` e pede confirmação. Guia: [briefings.md](briefings.md).
 
-Para Web Push, forneça **`ORBIT_PUSH_SUBJECT`** no ambiente do contêiner (contato `mailto:` ou HTTPS público válido), além dos hosts/fuso já usados; reinicie os processos. Não coloque essa variável apenas em `/config/orbit.env`, que lê somente `AI_*`. Nenhuma chave privada é colocada no YAML: VAPID é gerada uma vez no banco. É necessária saída DNS e HTTPS/443 para os serviços de push do navegador. Não abre uma porta adicional. Em HTTPS, ative em cada aparelho por clique e use o teste. Android e iOS têm requisitos e limites diferentes; veja [push.md](push.md).
+Para Web Push, forneça **`ORBIT_PUSH_SUBJECT`** (contato `mailto:` ou HTTPS público válido) em `/config/orbit.env` ou no ambiente do contêiner. O contato não vazio do arquivo prevalece e vale na próxima leitura; mudar o ambiente exige recriar o contêiner. Com ambos vazios, Push fica desativado. Nenhuma chave privada vai no YAML: VAPID é gerada uma vez no banco. É necessária saída DNS e HTTPS/443 para os serviços de Push, sem nova porta de entrada. Em HTTPS, ative por clique em cada aparelho e teste. Helium/ungoogled-chromium geralmente não recebem Push; o diagnóstico orienta usar navegador compatível. Android/iOS têm limites próprios; veja [push.md](push.md) e seu roteiro físico, ainda pendente.
 
 ## Visão geral
 
@@ -22,7 +32,7 @@ Para Web Push, forneça **`ORBIT_PUSH_SUBJECT`** no ambiente do contêiner (cont
 | Porta interna | `3000` (HTTP). O Compose publica em `30480` por padrão (`ORBIT_PORT`) |
 | Usuário | `568:568` (usuário `apps` do TrueNAS), sem root, sem capabilities, raiz somente leitura |
 | `/data` | Banco `orbit.db` com `-wal`/`-shm`. Gravável pelo UID do contêiner, modo 700 |
-| `/config` | `orbit.env` com as variáveis `AI_*`. Somente leitura, arquivo 600 |
+| `/config` | `orbit.env` com `AI_*` e as seis chaves não-IA permitidas na tabela abaixo. Somente leitura, arquivo 600 |
 | `/backups` | Cópias verificadas do banco |
 | Saúde | `GET /api/health`: 200 com interface e worker vivos; 503 se o worker parou de sinalizar. O `HEALTHCHECK` da imagem usa essa rota |
 
@@ -46,11 +56,21 @@ install -o 568 -g 568 -m 600 /dev/null /mnt/Configs/Apps/orbit/config/orbit.env
 
 Se usar outro UID, troque `568` aqui e em `user:` no YAML.
 
-### 2. Configuração de IA
+### 2. Configuração do arquivo
 
-Edite `/mnt/Configs/Apps/orbit/config/orbit.env` no Shell do TrueNAS (`nano`). Só as variáveis `AI_*` são lidas desse arquivo, e ele é relido a cada análise, sem reiniciar o app. Use os mesmos nomes do `.env.example`: `AI_PROTOCOL`, `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`, `AI_BRIEFING_MODEL`, preços e limites. O Orbit não escolhe fornecedor nem modelo por você.
+Edite `/mnt/Configs/Apps/orbit/config/orbit.env` no Shell do TrueNAS (`nano`). Site e worker compartilham `readEnvironment`; `readAIEnvironment` continua como interface compatível. O arquivo é relido a cada leitura/ciclo, sem alterar `process.env` ou a autenticação de ferramentas externas. Use os nomes do `.env.example`: `AI_PROTOCOL`, `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`, `AI_BRIEFING_MODEL`, preços e limites. Também aceita `ORBIT_PUSH_SUBJECT`, `COLLECTOR_CRON`, `COLLECTOR_TIMEZONE`, `COLLECTOR_MAX_RUNS_PER_DAY`, `COLLECTOR_MAX_ITEMS` e `SCHEDULER_ENABLED`. O Orbit não escolhe fornecedor/modelo nem cadastra fontes/interesses por você.
 
-A chave fica só nesse arquivo. Não a coloque no YAML: variáveis do Compose aparecem em `docker inspect` e na tela do app no TrueNAS. Com o arquivo vazio, o app abre e coleta, mas não analisa.
+Regras de leitura e precedência:
+
+- `ORBIT_ENV_FILE=/config/orbit.env` seleciona só esse arquivo. Sem a variável, usa `.env` e depois `.env.local` (o segundo vence); com `ORBIT_ENV_FILE=""`, não lê arquivo.
+- Se algum arquivo candidato existir, **todos os `AI_*` do ambiente são ignorados**, mesmo que uma chave esteja ausente/vazia no arquivo. Arquivo ilegível ou diretório deixa os `AI_*` ausentes, sem fallback para o ambiente. Arquivo ausente permite usar ambiente.
+- Nas seis chaves não-IA permitidas: **valor não vazio do arquivo → valor não vazio do ambiente → padrão**. Vazio conta como ausente, inclusive o contato vazio passado pelo Compose.
+- Agenda salva pela interface prevalece sobre os padrões do arquivo/ambiente. Arquivo vale na próxima leitura; mudança no ambiente do contêiner exige recriação. `SCHEDULER_ENABLED` só aceita `true`/`false`; limite automático inválido tem diagnóstico próprio.
+- Hosts permitidos, portas, caminhos de inicialização e `TZ` continuam só no ambiente. Não podem ser alterados por `orbit.env`.
+
+A chave fica só nesse arquivo. Não a coloque no YAML: variáveis do Compose aparecem em `docker inspect` e na tela do app no TrueNAS. Com o arquivo vazio, o app abre e coleta, mas não analisa. **Configurações → Configuração reconhecida** (`/configuracoes#ia`) mostra arquivo, origem/estado, modelos e último sucesso, sem mostrar chave ou endereço do contato. `AI_MODEL` também é requisito do briefing; com teto USD, configure preços próprios de `AI_BRIEFING_MODEL`.
+
+Para CliProxyApi OpenAI Compatible na rede do NAS, configure `AI_PROTOCOL=openai` e `AI_BASE_URL=http://192.168.1.3:8317/v1`, substituindo IP/porta pelo endereço real alcançável a partir do contêiner. Numa rede Docker compartilhada, o nome do serviço também funciona (ex.: `http://cliproxyapi:8317/v1`). Não exige flag extra. `localhost` dentro do contêiner aponta para o próprio Orbit, não para o NAS ou outro app. **HTTP envia chave e textos sem criptografia: use somente em rede confiável; prefira HTTPS fora dela.** Não inclua credenciais, query ou fragmento na URL; redirects continuam recusados. A interface/login e a extensão continuam exigindo HTTPS fora de localhost.
 
 ### 3. App personalizado
 
@@ -59,7 +79,7 @@ A chave fica só nesse arquivo. Não a coloque no YAML: variáveis do Compose ap
 ```yaml
 services:
   orbit:
-    image: ghcr.io/pedrorbc/orbit:0.2.1
+    image: ghcr.io/pedrorbc/orbit:0.2.2
     init: true
     restart: unless-stopped
     stop_grace_period: 30s
@@ -77,6 +97,9 @@ services:
       COLLECTOR_TIMEZONE: America/Sao_Paulo
       # Endereços pelos quais você abre o Orbit, separados por vírgula.
       ORBIT_ALLOWED_HOSTS: orbit.seudominio.com
+      # Contato VAPID; preencha aqui ou em orbit.env no futuro build desta evolução.
+      # Na imagem 0.2.2, precisa estar aqui. Não use o exemplo como contato real.
+      ORBIT_PUSH_SUBJECT: mailto:seu-email@seu-dominio.com
     volumes:
       - /mnt/Configs/Apps/orbit/data:/data
       - /mnt/Configs/Apps/orbit/config:/config:ro
@@ -110,18 +133,19 @@ O comando pede uma senha (mínimo 12 caracteres, digitada sem eco), mostra a cha
 
 ## Acesso remoto e HTTPS
 
-O contêiner fala HTTP na porta publicada. Para usar no celular ou fora de casa, coloque um proxy reverso HTTPS na frente. Qualquer um serve se cumprir quatro requisitos:
+O contêiner fala HTTP na porta publicada. Para usar no celular ou fora de casa, coloque um proxy reverso HTTPS na frente. Ele precisa cumprir cinco requisitos:
 
-1. Termina TLS com certificado válido (necessário para login e para instalar o PWA).
-2. Repassa o `Host` original (não reescreve para o IP interno).
+1. Termina TLS com certificado válido (necessário para login e instalação do PWA).
+2. Repassa o `Host` público original, incluindo a porta quando houver; não reescreve para o IP interno.
 3. Envia `X-Forwarded-Proto: https`.
-4. Esse host está em `ORBIT_ALLOWED_HOSTS`. Sem isso, o Orbit responde 403 a qualquer Host que não seja `localhost`.
+4. Deixa `X-Forwarded-Host` **ausente ou igual ao host público**, incluindo a porta. Um host interno divergente pode fazer o Next recusar Server Actions, inclusive as de Push. Isso não autoriza relaxar Origin/CSRF.
+5. O host público está em `ORBIT_ALLOWED_HOSTS` no ambiente do contêiner. Sem isso, hosts não locais recebem 403.
 
 Exemplos:
 
 - **Caddy** (`reverse_proxy`): testado de ponta a ponta com a imagem, incluindo login, Server Actions, recusa de outra origem e pareamento da extensão.
 - **Tailscale Serve** (`tailscale serve --bg --https=8443 http://127.0.0.1:30480`, num nó com rede do host; acesso só pelo tailnet): preserva o `Host` e envia `X-Forwarded-Proto: https`, conforme o código do Tailscale. Não foi testado aqui.
-- **Nginx Proxy Manager** (proxy host para `http://<IP do NAS>:30480`): não foi testado aqui. Confira se o `Host` e o `X-Forwarded-Proto` chegam como descrito acima.
+- **Nginx Proxy Manager** (proxy host para `http://<IP do NAS>:30480`): não foi testado aqui. Confira `Host`, `X-Forwarded-Proto` e `X-Forwarded-Host` conforme os requisitos acima.
 
 Rede, DNS, certificados e roteador ficam por sua conta.
 
@@ -149,20 +173,24 @@ Ao atualizar o Orbit, baixe a extensão de novo, substitua os arquivos da pasta 
 
 ## Variáveis
 
-Vão em `environment:` no YAML, exceto as `AI_*`, que ficam em `orbit.env`.
+A tabela descreve a implementação em desenvolvimento; na imagem `0.2.2`, só `AI_*` é lido de `orbit.env`. Os demais valores vão em `environment:` do YAML quando não estiverem no arquivo permitido. Nunca coloque chave de IA no YAML.
 
-| Variável | Padrão | Uso |
-| --- | --- | --- |
-| `ORBIT_ALLOWED_HOSTS` | vazio | Hosts aceitos além de localhost (ex.: `orbit.seudominio.com,nas.tailnet.ts.net:8443`) |
-| `TZ` | `America/Sao_Paulo` no Compose | Horários na interface e nos logs |
-| `COLLECTOR_TIMEZONE` | `TZ` | Fuso da agenda |
-| `SCHEDULER_ENABLED` | `true` | Agenda automática |
-| `COLLECTOR_CRON` | `0 8,14,20 * * *` | Horários das coletas |
-| `COLLECTOR_MAX_RUNS_PER_DAY` | `6` | Limite automático em 24 h (1–12) |
-| `COLLECTOR_MAX_ITEMS` | `20` | Itens por fonte e execução (1–50) |
-| `ORBIT_DB_PATH` | `/data/orbit.db` | Não altere no contêiner |
-| `ORBIT_ENV_FILE` | `/config/orbit.env` | Arquivo das variáveis `AI_*` |
-| `ORBIT_BACKUP_DIR` | `/backups` | Destino de `scripts/backup.ts` |
+| Variável | Padrão | Pode ir no orbit.env | Uso |
+| --- | --- | --- | --- |
+| `AI_*` | URL/chave/modelos ausentes | Sim | Protocolo, endpoint, chave, modelos, preços e limites; use `.env.example` |
+| `ORBIT_PUSH_SUBJECT` | vazio | Sim | Contato VAPID `mailto:` ou HTTPS público; ausente/inválido bloqueia envio, sem revelar o endereço |
+| `COLLECTOR_TIMEZONE` | fuso do sistema; Compose fornece `America/Sao_Paulo` | Sim | Fuso da coleta e herança explícita dos briefings gerais |
+| `SCHEDULER_ENABLED` | `true` | Sim | Padrão da agenda pessoal, aceita só `true`/`false` |
+| `COLLECTOR_CRON` | `0 8,14,20 * * *` | Sim | Horários das coletas pessoais |
+| `COLLECTOR_MAX_RUNS_PER_DAY` | `6` | Sim | Limite de coletas automáticas em 24 h (1–12) |
+| `COLLECTOR_MAX_ITEMS` | `20` | Sim | Itens por fonte/execução (1–50) |
+| `ORBIT_ALLOWED_HOSTS` | vazio | Não | Hosts adicionais exatos, com porta se houver (ex.: `orbit.seudominio.com,nas.tailnet.ts.net:8443`) |
+| `PORT` | `3000` | Não | Porta interna; o Compose publica `30480` por padrão (`ORBIT_PORT`) |
+| `ORBIT_HOST` | `0.0.0.0` na imagem | Não | Interface de escuta; desenvolvimento usa `127.0.0.1` |
+| `ORBIT_DB_PATH` | `/data/orbit.db` na imagem | Não | Caminho SQLite; não altere no contêiner |
+| `ORBIT_ENV_FILE` | `/config/orbit.env` na imagem | Não | Seleciona arquivo do leitor; vazio desativa leitura |
+| `ORBIT_BACKUP_DIR` | `/backups` na imagem | Não | Destino de `scripts/backup.ts` |
+| `TZ` | `America/Sao_Paulo` no Compose | Não | Fuso do processo, usado quando não há fuso explícito |
 
 ## Backup
 
@@ -201,15 +229,15 @@ Mova os arquivos `-wal`/`-shm` antigos junto com o banco. Um WAL antigo ao lado 
 
 ## Atualização
 
-1. Faça um backup (item 1 acima).
-2. No YAML do app, troque a tag da imagem para a nova versão (`0.2.1`, ou `sha-<commit curto>` para fixar um build exato). Evite `latest`: dificulta saber o que está rodando e voltar atrás.
+1. Faça um **backup online verificado antes da atualização** (item 1 acima) e guarde também a configuração em local protegido. A v2 do catálogo tem marcador/transação próprios além das migrations; depois dela, voltar à `0.2.2` exige esse backup anterior.
+2. No YAML do app, troque a tag da imagem para a nova versão (`0.2.2`, ou `sha-<commit curto>` para fixar um build exato). Evite `latest`: dificulta saber o que está rodando e voltar atrás.
 3. **Update/Save.** O TrueNAS recria o contêiner. O worker antigo libera o lease ao receber SIGTERM, e o novo aplica as migrações pendentes uma única vez antes de iniciar interface e worker.
 
 Uma coleta em andamento durante a atualização é marcada como interrompida e repetida pelo novo worker, sem duplicar itens. Se o processo morrer sem SIGTERM, o novo worker espera até 60 s o lease antigo vencer.
 
 ### Limites do rollback
 
-As migrações só andam para frente. Voltar a imagem depois que uma versão nova migrou o banco pode falhar ou corromper dados, porque o código antigo não conhece o esquema novo. Para voltar:
+As migrações só andam para frente. **Depois da consolidação de catálogo v2, voltar à imagem `0.2.2` exige restauração do backup anterior**. Trocar só a imagem não reverte temas, aliases, propostas ou auditorias e não é um rollback suportado. Isso vale mesmo sem novo arquivo SQL Drizzle. Para voltar:
 
 1. Pare o app.
 2. Restaure o backup feito **antes** da atualização.
@@ -229,7 +257,7 @@ O workflow `.github/workflows/ci.yml` roda testes, typecheck, build e e2e em PRs
 
 Use a versão ou o `sha-` no TrueNAS, nunca só `latest`. O `sha-` identifica exatamente o commit; a imagem também traz os labels `org.opencontainers.image.version` e `.revision`.
 
-O YAML deste guia fixa `0.2.1`. O [pacote é privado](https://github.com/users/PedroRBC/packages/container/package/orbit); acessar o link e baixar a imagem exigem autenticação. A CI da tag precisa concluir antes de instalar.
+O YAML deste guia fixa `0.2.2`. O [pacote é privado](https://github.com/users/PedroRBC/packages/container/package/orbit); acessar o link e baixar a imagem exigem autenticação. A CI da tag precisa concluir antes de instalar.
 
 Todo lançamento estável por tag (ex.: `v0.2.1`) publica `ghcr.io/pedrorbc/orbit:<versão>`, `:sha-<commit curto>` e move `latest` para ele; candidatos com `-` (ex.: `-rc.1`) nunca recebem `latest`. Push na main também move `latest`. Para uma atualização controlada no NAS, mantenha a versão fixa ou copie o digest do resumo da [publicação aprovada](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml):
 
@@ -259,7 +287,9 @@ Para usar IA no teste, copie um `orbit.env` para o volume `orbit-config`. Nunca 
 | Log: "Não foi possível abrir o banco em /data/orbit.db (UID 568)" | Pasta inexistente ou com outro dono | Refaça o passo 1 de "Pastas e permissões" e confira `ls -ln /mnt/Configs/Apps/orbit` |
 | App fica reiniciando | Erro na inicialização (permissão ou porta) | Veja os logs do app no TrueNAS |
 | Saúde `unhealthy` / Status "Sem sinal recente" | Worker parado ou esperando lease antigo (até 60 s) | Aguarde 1 min; se persistir, veja os logs e reinicie o app |
-| Status mostra erro de IA | `orbit.env` vazio, inválido ou ilegível | Confira dono e permissão 600; o diagnóstico nunca mostra a chave |
+| Status mostra erro de IA | `orbit.env` vazio, inválido ou ilegível, modelo/preço ausente | Abra `/configuracoes#ia`, confira origem e motivo, dono e permissão 600; o diagnóstico nunca mostra a chave |
+| Push desativado ou `AbortError` | Contato ausente/inválido ou navegador sem serviço Push | Confira o estado do contato; no Helium/ungoogled-chromium, tente navegador compatível ou celular; veja `push.md` |
+| Server Action/Push falha atrás do proxy | `X-Forwarded-Host` interno diferente do `Host` público | Remova o cabeçalho ou iguale ao host público com porta, sem relaxar Origin/HTTPS/CSRF |
 | Porta 30480 em uso | Outro app na mesma porta | Troque o lado esquerdo de `ports:` |
 | "Host não permitido" (403) | Endereço fora de `ORBIT_ALLOWED_HOSTS` ou proxy reescrevendo o Host | Inclua o host exato (com porta, se não for 443) e confira se o proxy preserva o `Host` |
 | Login diz "Abra o Orbit pelo endereço HTTPS" | Acesso por HTTP ou proxy sem `X-Forwarded-Proto: https` | Use o endereço HTTPS; ajuste o proxy |

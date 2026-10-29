@@ -2,19 +2,27 @@ import { createECDH, createHash, ECDH } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { request } from "node:https";
 import { checkServerIdentity } from "node:tls";
-import { and, asc, eq, lte } from "drizzle-orm";
+import { and, asc, desc, eq, lte } from "drizzle-orm";
 import { z } from "zod";
 import webPush from "web-push";
 import type { OrbitDB } from "../db/index";
 import { pushDeliveries, pushSubscriptions } from "../db/push-schema";
-import { getSetting, setSetting } from "./store";
+import { getSetting, setSetting, workerOnline } from "./store";
 import { isPublicAddress, publicFeedURL } from "./public-feed";
+import { readEnvironment } from "./ai-environment";
 
 const TTL = 3600;
 const subjectMessage = "Configure ORBIT_PUSH_SUBJECT com um contato mailto: ou HTTPS válido no servidor para ativar notificações.";
 const invalidSubscription = "Inscrição de notificação inválida ou provedor não suportado.";
 export class PushError extends Error {}
-export type PushConfiguration = { publicKey: string | null; subscribed: boolean; message: string };
+export type PushConfiguration = {
+  publicKey: string | null;
+  subscribed: boolean;
+  message: string;
+  contact: "ok" | "ausente" | "inválido";
+  workerOnline: boolean;
+  lastDelivery: { kind: "test" | "edition"; status: string; at: number } | null;
+};
 
 function endpointURL(value: unknown) {
   if (typeof value !== "string" || value.length > 2048 || /[\s\\\x00-\x1f\x7f]/.test(value)) throw new PushError(invalidSubscription);
@@ -50,8 +58,8 @@ function parseSubscription(serialized: unknown) {
     return value;
   } catch { throw new PushError(invalidSubscription); }
 }
-function subject() {
-  const value = process.env.ORBIT_PUSH_SUBJECT || "";
+export function subject(env: Record<string, string | undefined> = readEnvironment().env) {
+  const value = env.ORBIT_PUSH_SUBJECT || "";
   if (!value || value.length > 512 || /[\s\x00-\x1f\x7f]/.test(value)) throw new PushError(subjectMessage);
   if (/^mailto:[a-z0-9._+\-]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/i.test(value)) return value;
   try {
@@ -78,12 +86,18 @@ function vapidKeys(db: OrbitDB) {
 }
 const subscriptionId = (endpoint: string) => createHash("sha256").update(endpoint).digest("hex");
 export function pushConfiguration(db: OrbitDB, endpoint: unknown = null): PushConfiguration {
-  const subscribed = endpoint === null ? false : !!db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(eq(pushSubscriptions.id, subscriptionId(endpointURL(endpoint).href))).get();
+  let id: string | undefined;
+  try { id = subscriptionId(endpointURL(endpoint).href); } catch { /* Endpoint local não suportado não impede consultar a configuração. */ }
+  const subscribed = id ? !!db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(eq(pushSubscriptions.id, id)).get() : false;
+  const delivery = id ? db.select({ kind: pushDeliveries.kind, status: pushDeliveries.status, createdAt: pushDeliveries.createdAt, attemptedAt: pushDeliveries.attemptedAt }).from(pushDeliveries).where(eq(pushDeliveries.subscriptionId, id)).orderBy(desc(pushDeliveries.id)).get() : undefined;
+  const state = { subscribed, workerOnline: workerOnline(db), lastDelivery: delivery ? { kind: delivery.kind, status: delivery.status, at: delivery.attemptedAt ?? delivery.createdAt } : null };
+  const { env } = readEnvironment();
+  let contact: PushConfiguration["contact"] = env.ORBIT_PUSH_SUBJECT ? "inválido" : "ausente";
   try {
-    subject();
-    return { publicKey: vapidKeys(db).publicKey, subscribed, message: "Notificações opcionais, discretas e por aparelho. Nenhuma manchete aparece na tela bloqueada." };
+    subject(env); contact = "ok";
+    return { ...state, contact, publicKey: vapidKeys(db).publicKey, message: "Notificações opcionais, discretas e por aparelho. Nenhuma manchete aparece na tela bloqueada." };
   } catch (error) {
-    return { publicKey: null, subscribed, message: error instanceof PushError ? error.message : "Não foi possível consultar as notificações." };
+    return { ...state, contact, publicKey: null, message: error instanceof PushError ? error.message : "Não foi possível consultar as notificações." };
   }
 }
 export function savePushSubscription(db: OrbitDB, serialized: unknown): void {
@@ -101,7 +115,8 @@ function removeSubscription(db: OrbitDB, id: string) {
   db.update(pushDeliveries).set({ status: "cancelled" }).where(and(eq(pushDeliveries.subscriptionId, id), eq(pushDeliveries.status, "queued"))).run();
 }
 export function removePushSubscription(db: OrbitDB, endpoint: unknown): void {
-  const id = subscriptionId(endpointURL(endpoint).href);
+  let id: string;
+  try { id = subscriptionId(endpointURL(endpoint).href); } catch { return; }
   db.transaction(() => removeSubscription(db, id), { behavior: "immediate" });
 }
 function editionURL(editionId: number) {
@@ -158,6 +173,7 @@ export async function drainPush(db: OrbitDB, assertActive: () => void, signal?: 
   const check = () => { signal?.throwIfAborted(); assertActive(); };
   const owned = <T>(operation: () => T) => db.transaction(() => { check(); return operation(); }, { behavior: "immediate" });
   check();
+  if (!db.select({ id: pushDeliveries.id }).from(pushDeliveries).where(eq(pushDeliveries.status, "queued")).get()) return;
   owned(() => db.update(pushDeliveries).set({ status: "expired" }).where(and(eq(pushDeliveries.status, "queued"), lte(pushDeliveries.createdAt, Date.now() - TTL * 1000))).run());
   let vapidDetails: { subject: string; publicKey: string; privateKey: string };
   try {
@@ -178,10 +194,11 @@ export async function drainPush(db: OrbitDB, assertActive: () => void, signal?: 
     const { delivery, subscription } = claimed;
     if (!subscription) continue;
     const currentSubscription = and(eq(pushSubscriptions.id, subscription.id), eq(pushSubscriptions.p256dh, subscription.p256dh), eq(pushSubscriptions.auth, subscription.auth));
+    let failureStatus: "failed" | "expired" | "cancelled" = "failed";
     const boundary = () => {
       check();
-      if (delivery.createdAt + TTL * 1000 <= Date.now()) throw new PushError("Notificação vencida.");
-      if (!db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(currentSubscription).get()) throw new PushError("Notificações desativadas neste aparelho.");
+      if (delivery.createdAt + TTL * 1000 <= Date.now()) { failureStatus = "expired"; throw new PushError("Notificação vencida."); }
+      if (!db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(currentSubscription).get()) { failureStatus = "cancelled"; throw new PushError("Notificações desativadas neste aparelho."); }
     };
     let status = 0;
     try {
@@ -196,7 +213,7 @@ export async function drainPush(db: OrbitDB, assertActive: () => void, signal?: 
       boundary(); status = await sendPush(details, boundary, signal);
     } catch { check(); }
     owned(() => {
-      db.update(pushDeliveries).set({ status: status >= 200 && status < 300 ? "sent" : "failed" }).where(eq(pushDeliveries.id, delivery.id)).run();
+      db.update(pushDeliveries).set({ status: status >= 200 && status < 300 ? "sent" : failureStatus }).where(eq(pushDeliveries.id, delivery.id)).run();
       if ((status === 404 || status === 410) && db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(currentSubscription).get()) removeSubscription(db, subscription.id);
     });
   }

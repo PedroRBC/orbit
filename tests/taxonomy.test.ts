@@ -5,9 +5,9 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import * as schema from "../src/db/schema";
-import { consolidateTaxonomy } from "../src/db/taxonomy";
+import { consolidateTaxonomy, consolidateThemeCatalog } from "../src/db/taxonomy";
 import { applyFeedback, learnedWeights, rankingExpression, updateTopicWeight } from "../src/lib/feedback";
-import { normalizeTheme, normalizeThemeWeights, TAXONOMY, THEME_IDS, themeLabel } from "../src/lib/taxonomy";
+import { legacyNormalizeTheme as normalizeTheme, legacyNormalizeThemeWeights as normalizeThemeWeights, LEGACY_TAXONOMY as TAXONOMY, THEME_IDS, themeLabel } from "../src/lib/taxonomy";
 
 const clients: Sqlite.Database[] = [];
 afterEach(() => { for (const client of clients.splice(0)) client.close(); });
@@ -120,10 +120,11 @@ describe("consolidação transacional da taxonomia", () => {
     expect(learnedWeights(db).tecnologia).toBe(20);
     applyFeedback(db, "youtube:legacy-1", "up"); applyFeedback(db, "youtube:legacy-1", "up");
     expect(JSON.parse(db.select().from(schema.interestProfile).get()!.weights).tecnologia).toBe(40.5);
+    consolidateThemeCatalog(db);
     updateTopicWeight(db, "HARDWARE", 2.5);
     applyFeedback(db, "youtube:legacy-1", "save"); applyFeedback(db, "youtube:legacy-1", "save");
     expect(learnedWeights(db).tecnologia).toBe(2.5);
-    const ranking = db.select({ score: rankingExpression({ "Inteligência artificial": 4, Hardware: 1 }) }).from(schema.processedItems).where(eq(schema.processedItems.rawId, "youtube:legacy-1")).get();
+    const ranking = db.select({ score: rankingExpression({ tecnologia: 2.5 }) }).from(schema.processedItems).where(eq(schema.processedItems.rawId, "youtube:legacy-1")).get();
     expect(ranking?.score).toBe(55);
     expect(() => updateTopicWeight(db, "tema livre novo", 2)).toThrow(/tema|taxonomia/i);
   });

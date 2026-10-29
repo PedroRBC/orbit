@@ -1,14 +1,34 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { openDatabase } from "../src/db/index";
-import { sources, sourceItems, rawItems } from "../src/db/schema";
-import { enqueueCollection, claimRun, saveRawItems, reserveUsage, settleUsage, dailyUsage, activeItemCondition, acquireLease, workerOnline } from "../src/lib/store";
+import { collectorRuns, sources, sourceItems, rawItems } from "../src/db/schema";
+import { queueBriefingRefresh, enqueueCollection, claimRun, saveRawItems, reserveUsage, settleUsage, dailyUsage, activeItemCondition, acquireLease, workerOnline } from "../src/lib/store";
 
 const databases: ReturnType<typeof openDatabase>[] = [];
 function database() { const db = openDatabase(":memory:"); databases.push(db); return db; }
 afterEach(() => { for (const db of databases.splice(0)) db.$client.close(); });
 
 describe("persistência e fila", () => {
+  it("briefing tem fila própria, sem sobreposição e com intervalo de cinco minutos por início", () => {
+    const db = database(), now = Date.now();
+    const transaction = vi.spyOn(db, "transaction");
+    const collection = enqueueCollection(db);
+    expect(queueBriefingRefresh(db, now)).toBe("queued");
+    expect(enqueueCollection(db)).toBe(collection);
+    expect(queueBriefingRefresh(db, now)).toBe("active");
+    db.update(collectorRuns).set({ status: "running" }).where(eq(collectorRuns.kind, "briefing")).run();
+    expect(queueBriefingRefresh(db, now + 600000)).toBe("active");
+    db.update(collectorRuns).set({ status: "completed", finishedAt: now + 1000 }).where(eq(collectorRuns.kind, "briefing")).run();
+    expect(queueBriefingRefresh(db, now + 299999)).toBe("recent");
+    expect(queueBriefingRefresh(db, now + 300000)).toBe("queued");
+    expect(db.select().from(collectorRuns).all()).toHaveLength(3);
+    expect(transaction).toHaveBeenLastCalledWith(expect.any(Function), { behavior: "immediate" });
+  });
+  it("execuções filhas não bloqueiam o briefing pai", () => {
+    const db = database();
+    db.insert(collectorRuns).values({ kind: "briefing", parentId: 999, status: "running", startedAt: Date.now() }).run();
+    expect(queueBriefingRefresh(db)).toBe("queued");
+  });
   it("enfileira uma única coleta enquanto há execução pendente", () => {
     const db = database();
     const first = enqueueCollection(db);

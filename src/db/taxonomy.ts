@@ -1,5 +1,5 @@
 import type Sqlite from "better-sqlite3";
-import { normalizeTheme, normalizeThemeWeights, TAXONOMY, themeWeightsSchema } from "../lib/taxonomy";
+import { legacyNormalizeTheme, legacyNormalizeThemeWeights, LEGACY_TAXONOMY, SEED_THEMES, themeKey, themeWeightsSchema } from "../lib/taxonomy";
 
 type Counts = { items: number; profiles: number; fallbackItems: number; fallbackWeights: number };
 export type TaxonomyConsolidation = Counts & { version: 1; applied: boolean };
@@ -34,7 +34,7 @@ export function consolidateTaxonomy(db: { $client: Sqlite.Database }): TaxonomyC
       );
     `);
     const insertTheme = client.prepare("INSERT INTO taxonomy_themes (id, label) VALUES (?, ?)");
-    for (const theme of TAXONOMY) insertTheme.run(theme.id, theme.label);
+    for (const theme of LEGACY_TAXONOMY) insertTheme.run(theme.id, theme.label);
     const now = Date.now();
     const items = client.prepare("SELECT rawId, theme FROM processed_items ORDER BY rawId").all() as { rawId: string; theme: string }[];
     const profiles = client.prepare("SELECT id, weights FROM interest_profile ORDER BY id").all() as { id: number; weights: string }[];
@@ -43,7 +43,7 @@ export function consolidateTaxonomy(db: { $client: Sqlite.Database }): TaxonomyC
     const insertItemAudit = client.prepare("INSERT INTO taxonomy_item_audit (raw_id, original_theme, theme_id, mapping, consolidated_at) VALUES (?, ?, ?, ?, ?)");
     const updateItem = client.prepare("UPDATE processed_items SET theme = ? WHERE rawId = ?");
     for (const item of items) {
-      const normalized = normalizeTheme(item.theme);
+      const normalized = legacyNormalizeTheme(item.theme);
       const id = normalized ?? "outros";
       if (!normalized) fallbackItems++;
       insertItemAudit.run(item.rawId, item.theme, id, item.theme === id ? "canonical" : normalized ? "alias" : "fallback", now);
@@ -56,11 +56,11 @@ export function consolidateTaxonomy(db: { $client: Sqlite.Database }): TaxonomyC
     for (const profile of profiles) {
       if (duplicateWeightKeys.get(profile.weights)) throw new Error("Pesos legados contêm temas duplicados; consolidação cancelada.");
       const weights = themeWeightsSchema.parse(JSON.parse(profile.weights));
-      const mapped = normalizeThemeWeights(weights);
+      const mapped = legacyNormalizeThemeWeights(weights);
       const serialized = JSON.stringify(mapped);
       insertProfileAudit.run(profile.id, profile.weights, serialized, now);
       for (const [theme, weight] of Object.entries(weights)) {
-        const normalized = normalizeTheme(theme);
+        const normalized = legacyNormalizeTheme(theme);
         const id = normalized ?? "outros";
         if (!normalized) fallbackWeights++;
         insertWeightAudit.run(profile.id, theme, weight, id, mapped[id]!, theme === id ? "canonical" : normalized ? "alias" : "fallback");
@@ -102,5 +102,72 @@ export function consolidateTaxonomy(db: { $client: Sqlite.Database }): TaxonomyC
     const counts = { items: items.length, profiles: profiles.length, fallbackItems, fallbackWeights };
     client.prepare("INSERT INTO taxonomy_consolidations (version, completed_at, item_count, profile_count, fallback_item_count, fallback_weight_count) VALUES (1, ?, ?, ?, ?, ?)").run(now, counts.items, counts.profiles, fallbackItems, fallbackWeights);
     return { version: 1, applied: true, ...counts };
+  }).immediate();
+}
+
+export function assertThemeAliasesUnique(themes: readonly { id: string; label: string; aliases: readonly string[] }[]): void {
+  const owners = new Map<string, string>();
+  for (const theme of themes) {
+    for (const alias of [theme.id, theme.label, ...theme.aliases]) {
+      const key = themeKey(alias);
+      if (owners.has(key) && owners.get(key) !== theme.id) throw new Error("Alias duplicado entre temas.");
+      owners.set(key, theme.id);
+    }
+  }
+}
+
+export function consolidateThemeCatalog(db: { $client: Sqlite.Database }): { version: 2; applied: boolean } {
+  const client = db.$client;
+  return client.transaction((): { version: 2; applied: boolean } => {
+    client.exec(`CREATE TABLE IF NOT EXISTS taxonomy_catalog_consolidations (
+      version INTEGER PRIMARY KEY CHECK (version = 2), completed_at INTEGER NOT NULL
+    )`);
+    if (client.prepare("SELECT 1 FROM taxonomy_catalog_consolidations WHERE version = 2").get()) return { version: 2, applied: false };
+
+    const removed = new Set(["Automóveis", "Aluguel de carros", "Coleção de carros", "Oficina automotiva", "Carros", "Cars"]);
+    const themes = SEED_THEMES.map(theme => ({ ...theme, aliases: [
+      ...LEGACY_TAXONOMY.find(legacy => legacy.id === theme.id)!.aliases.filter(alias => !removed.has(alias)),
+      ...(theme.id === "politica-interna" ? ["Política interna"] : []),
+    ] }));
+    assertThemeAliasesUnique(themes);
+    client.exec(`
+      ALTER TABLE taxonomy_themes ADD COLUMN origin TEXT NOT NULL DEFAULT 'seed' CHECK (origin IN ('seed','ai'));
+      ALTER TABLE taxonomy_themes ADD COLUMN aliases TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE taxonomy_themes ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0;
+      DROP TRIGGER taxonomy_catalog_insert;
+      DROP TRIGGER taxonomy_catalog_update;
+      DROP TRIGGER taxonomy_catalog_delete;
+    `);
+    const updateTheme = client.prepare("UPDATE taxonomy_themes SET label = ?, aliases = ? WHERE id = ?");
+    for (const theme of themes) updateTheme.run(theme.label, JSON.stringify(theme.aliases), theme.id);
+    client.exec(`
+      DROP TRIGGER taxonomy_item_insert_audit;
+      CREATE TRIGGER taxonomy_item_insert_audit AFTER INSERT ON processed_items
+      WHEN EXISTS (SELECT 1 FROM taxonomy_themes WHERE id = NEW.theme AND origin = 'seed') BEGIN
+        INSERT OR IGNORE INTO taxonomy_item_audit (raw_id, original_theme, theme_id, mapping, consolidated_at)
+        VALUES (NEW.rawId, NEW.theme, NEW.theme, 'canonical', unixepoch() * 1000);
+      END;
+      CREATE TRIGGER taxonomy_theme_guard BEFORE INSERT ON taxonomy_themes
+      WHEN NEW.origin <> 'ai' OR NEW.id NOT GLOB '[a-z0-9]*' OR NEW.id GLOB '*[^a-z0-9-]*'
+        OR NEW.id GLOB '*-' OR length(NEW.id) > 40 OR instr(NEW.id, char(0)) > 0 OR length(NEW.label) NOT BETWEEN 2 AND 40
+      BEGIN SELECT RAISE(ABORT, 'Tema inválido para o catálogo.'); END;
+      CREATE TRIGGER taxonomy_theme_immutable BEFORE UPDATE OF id, label, origin ON taxonomy_themes
+      BEGIN SELECT RAISE(ABORT, 'ID, rótulo e origem do tema são imutáveis.'); END;
+      CREATE TRIGGER taxonomy_theme_delete BEFORE DELETE ON taxonomy_themes
+      WHEN OLD.origin = 'seed' OR EXISTS (SELECT 1 FROM processed_items WHERE theme = OLD.id)
+      BEGIN SELECT RAISE(ABORT, 'Tema protegido ou com itens referenciando.'); END;
+      CREATE TABLE theme_proposals (
+        raw_id TEXT PRIMARY KEY REFERENCES raw_items(id), label TEXT NOT NULL, label_key TEXT NOT NULL,
+        aliases TEXT NOT NULL DEFAULT '[]', created_at INTEGER NOT NULL
+      );
+      CREATE INDEX theme_proposals_label_key ON theme_proposals(label_key);
+      CREATE TABLE taxonomy_reassignments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, raw_id TEXT NOT NULL REFERENCES raw_items(id),
+        from_theme TEXT NOT NULL, to_theme TEXT NOT NULL,
+        reason TEXT NOT NULL CHECK (reason IN ('proposal','legacy_label','merge')), at INTEGER NOT NULL
+      );
+    `);
+    client.prepare("INSERT INTO taxonomy_catalog_consolidations (version, completed_at) VALUES (2, ?)").run(Date.now());
+    return { version: 2, applied: true };
   }).immediate();
 }
