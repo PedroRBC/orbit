@@ -4,9 +4,48 @@ import { openDatabase } from "../src/db/index";
 import { collectorRuns, sources } from "../src/db/schema";
 import { acquireLease, claimRun, setSetting } from "../src/lib/store";
 import { readSchedule, queueScheduledRun } from "../src/lib/scheduler";
+import { readEditionSchedule } from "../src/lib/editions";
+import { readEnvironment } from "../src/lib/ai-environment";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 const databases: ReturnType<typeof openDatabase>[] = [];
-afterEach(() => { vi.useRealTimers(); for (const db of databases.splice(0)) db.$client.close(); });
+const directories: string[] = [];
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); for (const db of databases.splice(0)) db.$client.close(); for (const path of directories.splice(0)) rmSync(path, { recursive: true, force: true }); });
+it("SCHEDULER_ENABLED inválido cita a variável", () => {
+  expect(readSchedule(setup(), { SCHEDULER_ENABLED: "sim" })).toMatchObject({ enabled: false, error: expect.stringContaining("SCHEDULER_ENABLED") });
+});
+it("COLLECTOR_MAX_RUNS_PER_DAY inválido cita a variável", () => {
+  expect(readSchedule(setup(), { COLLECTOR_MAX_RUNS_PER_DAY: "99" }).error).toContain("COLLECTOR_MAX_RUNS_PER_DAY");
+});
+it("origem da agenda", () => {
+  const db = setup();
+  expect(readSchedule(db, {}).origin).toBe("padrão");
+  expect(readSchedule(db, { COLLECTOR_CRON: "0 12 * * *" }).origin).toBe("ambiente");
+  setSetting(db, "scheduler_config", JSON.stringify({ enabled: true, expression: "0 14 * * *", timezone: "UTC" }));
+  expect(readSchedule(db, {}).origin).toBe("interface");
+});
+it("agendas preservam origem do leitor e respeitam o env explícito", () => {
+  const path = mkdtempSync(join(tmpdir(), "orbit-schedule-env-")); directories.push(path);
+  const file = join(path, "orbit.env"); writeFileSync(file, "COLLECTOR_CRON=0 12 * * *\nCOLLECTOR_TIMEZONE=Europe/Lisbon\nSCHEDULER_ENABLED=false\n");
+  vi.stubEnv("ORBIT_ENV_FILE", file);
+  const db = setup(), env = readEnvironment().env;
+  expect(readSchedule(db)).toMatchObject({ origin: "arquivo", enabled: false, timezone: "Europe/Lisbon" });
+  expect(readSchedule(db, env).origin).toBe("arquivo");
+  expect(readSchedule(db, { COLLECTOR_TIMEZONE: "UTC" })).toMatchObject({ origin: "ambiente", timezone: "UTC", enabled: true });
+  expect(readSchedule(db, {}).origin).toBe("padrão");
+  expect(readEditionSchedule(db, env)).toMatchObject({ origin: "arquivo", timezone: "Europe/Lisbon" });
+  expect(readEditionSchedule(db, { COLLECTOR_TIMEZONE: "UTC" })).toMatchObject({ origin: "ambiente", timezone: "UTC" });
+  expect(readEditionSchedule(db, {})).toMatchObject({ origin: "padrão", enabled: false });
+  setSetting(db, "scheduler_config", JSON.stringify({ enabled: true, expression: "0 14 * * *", timezone: "UTC" }));
+  expect(readEditionSchedule(db, {}).origin).toBe("coleta");
+  setSetting(db, "edition_schedule", JSON.stringify({ enabled: true, timezone: "UTC" }));
+  expect(readEditionSchedule(db, {}).origin).toBe("interface");
+});
+it("fila agendada usa o env explícito", () => {
+  expect(queueScheduledRun(setup(), "owner", new Date(), { SCHEDULER_ENABLED: "false" })).toBeNull();
+});
 function setup() { const db = openDatabase(":memory:"); databases.push(db); acquireLease(db, "owner"); db.insert(sources).values({ channelId: "channel", name: "Canal" }).run(); return db; }
 
 describe("agendamento local", () => {

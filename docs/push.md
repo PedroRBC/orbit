@@ -2,7 +2,7 @@
 
 ## Integração
 
-O módulo depende da migração de `src/db/push-schema.ts`. Não cria tabelas em runtime. Reexporte `pushSubscriptions` e `pushDeliveries` pelo schema principal e gere/aplique a migração antes de incluir a UI ou chamar o worker.
+O schema de `src/db/push-schema.ts` é reexportado pelo schema principal. `openDatabase` aplica as migrações versionadas de `drizzle/`, incluindo as tabelas de Push, antes de disponibilizar o banco à interface e ao worker. O módulo de Push não cria tabelas por conta própria.
 
 Contratos da biblioteca (`src/lib/push.ts`):
 
@@ -47,6 +47,9 @@ type PushConfiguration = {
   publicKey: string | null;
   subscribed: boolean;
   message: string;
+  contact: "ok" | "ausente" | "inválido";
+  workerOnline: boolean;
+  lastDelivery: { kind: "test" | "edition"; status: string; at: number } | null;
 };
 type ActionResult = { message: string; error?: boolean; code?: string };
 ```
@@ -57,7 +60,9 @@ type ActionResult = { message: string; error?: boolean; code?: string };
 
 Defina um contato real em `ORBIT_PUSH_SUBJECT`, por exemplo `mailto:seu-contato@example.com` ou `https://seu-dominio.example/contato`. O exemplo não deve ser usado como contato de produção. HTTP, localhost, IP literal, credenciais e caracteres de controle não são aceitos. A URL de contato não é acessada pelo Orbit.
 
-No Docker, configure a variável no ambiente do contêiner e reinicie os processos. Não a coloque apenas em `/config/orbit.env`: esse arquivo é relido exclusivamente para `AI_*`. Fora do Docker, forneça a variável no ambiente de inicialização (ou no `.env` carregado pelo supervisor). Ela precisa chegar tanto ao Next quanto ao worker. Não precisa de chave de um serviço pago, Firebase SDK, conta de provedor nem nova porta de entrada.
+No Docker, o contato pode ficar em `/config/orbit.env` (`ORBIT_ENV_FILE=/config/orbit.env`) ou no ambiente do contêiner. O site e o worker releem esse arquivo; o contato não vazio do arquivo prevalece sobre o ambiente, sem reiniciar. Fora do Docker, o leitor usa `.env` e depois `.env.local` quando `ORBIT_ENV_FILE` não está definido. Mudanças no ambiente do contêiner exigem reiniciar os processos. Nenhum endereço de contato é devolvido ao navegador: o painel mostra apenas seu estado. Não precisa de chave de um serviço pago, Firebase SDK, conta de provedor nem nova porta de entrada.
+
+O proxy reverso deve manter o Host público validado pelo Orbit. `X-Forwarded-Host` precisa estar ausente ou ser igual ao host público (incluindo a porta, quando houver); um valor interno divergente pode fazer o Next recusar Server Actions. Preserve as verificações de Origin/HTTPS e configure `ORBIT_ALLOWED_HOSTS` no ambiente do contêiner. Isso não autoriza relaxar CSRF.
 
 As chaves VAPID são geradas uma vez pelo `web-push` e persistidas como `settings["push_vapid"]`, contendo chave pública e privada. A criação é transacional. Só a pública sai nas ações. Se o contato estiver ausente/inválido, a configuração mostra a pendência e o worker não envia. Chaves danificadas, ou ausentes enquanto ainda há inscrições, não são substituídas silenciosamente: restaure o banco/backup original. Preserve SQLite e backups como segredos; apagar as chaves exige reconectar os aparelhos.
 
@@ -71,6 +76,10 @@ O servidor precisa de DNS e saída HTTPS/443 para o provedor do navegador. Brows
 4. **Desativar neste aparelho** remove a inscrição no servidor e cancela sua fila ainda não enviada; depois remove a inscrição no navegador. Se a remoção local falhar, o painel informa que o servidor já foi desativado e orienta corrigir a permissão do site. Um envio já em trânsito não pode ser recolhido.
 
 No iPhone/iPad, Web Push exige iOS/iPadOS 16.4 ou posterior, instalação na Tela de Início e abertura pelo ícone instalado. Em outros sistemas, app/site pode estar fechado, mas a infraestrutura de push do navegador/sistema precisa continuar permitida. Encerrar o navegador à força, economia de bateria, restrições de notificações, indisponibilidade do provedor ou modo foco podem impedir/adiar a entrega. Não prometemos entrega garantida ou imediata. Servidor e worker precisam permanecer ligados.
+
+Navegadores sem serviços do Google, como Helium e ungoogled-chromium, geralmente não recebem Web Push. Um `AbortError` no registro pode indicar esse limite; tente Chrome, Firefox, Safari ou o celular. A detecção é por suporte e erro, não pelo nome do navegador. As operações de consulta, inscrição, remoção e Server Actions têm prazo de 30 segundos; o prompt de permissão não tem prazo. Se `subscribe` não responder, o botão volta a ficar disponível, mas a promessa nativa ainda está em andamento: nenhum segundo `subscribe` começa antes de ela terminar. Recarregue a página ou use outro navegador. Uma chave VAPID local divergente é removida no servidor e no navegador antes de inscrever novamente.
+
+O painel combina os estados do navegador e do servidor; uma inscrição local não reconhecida pede **Ativar** para reconectar. Mostra o último envio deste aparelho e avisa quando o worker está sem sinal recente. Após **Testar**, atualiza o diagnóstico aos 5 e aos 20 segundos. “Enviado ao provedor” significa aceitação pelo provedor, não prova de exibição no aparelho; “aguardando o worker”, falha, expiração ou tentativa sem confirmação também não comprovam entrega.
 
 O limite é dez inscrições. Inscrição local existente que não está mais no servidor pode ser reativada pelo clique. Permissão negada não é repedida automaticamente; mude-a no navegador e recarregue a página. Ao desativar, a permissão do site pode continuar concedida: isso não significa que o Orbit continue inscrito. Logout/expiração da sessão não revoga o opt-in de push; o aviso permanece genérico e o clique exige login se necessário.
 
@@ -97,13 +106,21 @@ O worker marca `attempted` **e confirma a transação antes de DNS/rede**. Verif
 Teste isolado, sem push/API reais:
 
 ```sh
-npm test -- tests/push.test.ts tests/session-guard.test.ts tests/proxy.test.ts
-npx tsc --noEmit --incremental false
+ORBIT_ENV_FILE="" npm test -- tests/push.test.ts tests/session-guard.test.ts tests/proxy.test.ts
+ORBIT_ENV_FILE="" npx playwright test tests/e2e/push.spec.ts
+ORBIT_ENV_FILE="" npm run typecheck
 ```
 
-`tests/push.test.ts` usa SQLite isolado e um fixture `CREATE TABLE IF NOT EXISTS` equivalente ao schema quando a migração ainda não foi integrada. DNS/HTTPS são mocks; a criptografia usa chaves sintéticas geradas no teste. O SW roda em sandbox com APIs de notificação/janelas mockadas, incluindo ausência de janela, destinos maliciosos e cache offline estático. Não valida serviço do SO ou entrega por provedor real.
+`tests/push.test.ts` usa SQLite isolado com as mesmas migrações versionadas aplicadas por `openDatabase` em produção, sem fixture paralelo de criação de tabelas. DNS/HTTPS são mocks; a criptografia usa chaves sintéticas geradas no teste. O SW roda em sandbox com APIs de notificação/janelas mockadas, incluindo ausência de janela, destinos maliciosos e cache offline estático. Não valida serviço do SO ou entrega por provedor real.
 
-Após integrar migração, UI e worker, testar manualmente em navegador/aparelho real:
+Roteiro no Android (teste físico ainda pendente):
+
+1. Abra o Orbit no Chrome por HTTPS e entre na sua conta.
+2. Em Configurações, clique **Ativar neste aparelho** e conceda a permissão.
+3. Clique **Testar notificação** e confira **Último envio** após 5 e 20 segundos. Se aparecer **Worker sem sinal recente**, confira o contêiner e sua saída HTTPS.
+4. Confirme o aviso no Android e toque nele. Aceitação pelo provedor não substitui essa conferência: bateria, permissões e modo foco podem impedir a exibição.
+
+Testar também manualmente em navegador/aparelho real:
 
 - Ausência de `ORBIT_PUSH_SUBJECT` aparece no painel e não envia. Configurar contato real e reiniciar, sem expor chaves/endpoints em capturas ou logs.
 - Antes da primeira edição, carregar o painel não abre prompt. Ativar no clique, confirmar permissão e testar sem aguardar o horário agendado; fechar o Orbit antes do worker escoar a fila. O clique deve abrir o arquivo `/briefings` mesmo vazio, passando pelo login se a sessão expirou. Com uma edição pronta, repetir após o intervalo de taxa e confirmar que o teste abre `/briefings/<id>`.

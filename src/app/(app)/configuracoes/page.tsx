@@ -1,4 +1,5 @@
 import { connection } from "next/server";
+import { basename, isAbsolute } from "node:path";
 import { requireSession } from "../../../lib/session";
 import { LockKeyhole, ArrowUpRight } from "lucide-react";
 import { desc, eq } from "drizzle-orm";
@@ -8,6 +9,7 @@ import { getProfile } from "../../../lib/store";
 import { readSchedule } from "../../../lib/scheduler";
 import { readEditionSchedule } from "../../../lib/editions";
 import { aiStatus } from "../../../lib/config";
+import { readEnvironment } from "../../../lib/ai-environment";
 import { logout, saveEditionSchedule, saveProfile, saveSchedule } from "../../actions";
 import { ActionForm, SubmitButton } from "../../components";
 import { PushSettings } from "../../push-settings";
@@ -18,9 +20,11 @@ export default async function SettingsPage() {
   await connection();
   const db = getDatabase();
   const profile = getProfile(db);
-  const ai = aiStatus();
-  const schedule = readSchedule(db);
-  const editionSchedule = readEditionSchedule(db);
+  const ai = aiStatus(db);
+  const { env, source } = readEnvironment();
+  const fileLabel = isAbsolute(ai.file.label) && !ai.file.label.startsWith("/config/") ? basename(ai.file.label) : ai.file.label;
+  const schedule = readSchedule(db, env);
+  const editionSchedule = readEditionSchedule(db, env);
   const latestEdition = db.select({ id: editions.id }).from(editions).where(eq(editions.status, "published")).orderBy(desc(editions.id)).get();
   return <>
     <div className="page-heading"><div><h1>Configurações</h1><p>Agenda, notificações e conexões. Suas escolhas permanecem privadas.</p></div></div>
@@ -52,14 +56,26 @@ export default async function SettingsPage() {
       <p className="field-help">Nenhuma preferência vem preenchida. <a href="/perfil#temas">Veja os temas e ajuste os pesos do feedback</a>.</p>
     </section>
     <section className="panel ai-panel" id="ia">
-      <div className="section-heading"><div><h2>Conexão de IA</h2><p>URL e chave ficam somente no servidor.</p></div><span className={`state-label ${ai.ready ? "success-text" : "warning-text"}`}><span className="dot"/>{ai.ready ? "Configurada" : ai.state === "invalid" ? "Configuração inválida" : "Aguardando configuração"}</span></div>
-      {ai.ready && <dl className="detail-list"><div><dt>Protocolo</dt><dd>{ai.protocol === "openai" ? "OpenAI Compatible" : "Anthropic Compatible"}</dd></div><div><dt>Modelo</dt><dd>{ai.model}</dd></div></dl>}
+      <div className="section-heading"><div><h2>Configuração reconhecida</h2><p>Conexão de IA e origens dos valores em uso. Chave e contato ficam somente no servidor.</p></div><span className={`state-label ${ai.ready ? "success-text" : "warning-text"}`}><span className="dot"/>{ai.ready ? "Configurada" : ai.state === "invalid" ? "Configuração inválida" : "Aguardando configuração"}</span></div>
+      <dl className="detail-list">
+        <div><dt>Arquivo</dt><dd>{fileLabel} · {ai.file.state} · Origem: {env.ORBIT_ENV_FILE === undefined ? "padrão" : "ambiente"}</dd></div>
+        <div><dt>Protocolo</dt><dd>{!env.AI_PROTOCOL || env.AI_PROTOCOL === "openai" ? "OpenAI Compatible" : env.AI_PROTOCOL === "anthropic" ? "Anthropic Compatible" : "inválido"} · Origem: {source("AI_PROTOCOL") === "ausente" ? "padrão" : source("AI_PROTOCOL")}</dd></div>
+        <div><dt>Endpoint</dt><dd>{ai.endpoint ? `${ai.endpoint.protocol}//${ai.endpoint.host}` : source("AI_BASE_URL") === "ausente" ? "ausente" : "inválido"} · Origem: {source("AI_BASE_URL")}</dd></div>
+        <div><dt>Chave</dt><dd>{ai.apiKey} · Origem: {source("AI_API_KEY")}</dd></div>
+        {([ ["Modelo de classificação", ai.classification], ["Modelo de briefing", ai.briefing] ] as const).map(([label, model]) => <div key={label}><dt>{label}</dt><dd>{model.model || "ausente"} · {model.state} · Origem: {model.source}{model.reason && <p className="field-help warning-text">{model.reason}</p>}<p className="field-help">{model.lastSuccessAt === null ? "Nenhum sucesso com este modelo ainda" : `Último sucesso: ${new Date(model.lastSuccessAt).toLocaleString("pt-BR")}`}</p></dd></div>)}
+        <div><dt>Limites</dt><dd>{ai.state === "invalid" ? "Configuração inválida; confira o motivo abaixo." : `${ai.tokenLimit.toLocaleString("pt-BR")} tokens/dia · ${ai.costLimit === null ? "Sem teto em USD" : `USD ${ai.costLimit.toLocaleString("pt-BR")}/dia`}`}<p className="field-help">Tokens: {source("AI_DAILY_TOKEN_LIMIT") === "ausente" ? "padrão" : source("AI_DAILY_TOKEN_LIMIT")} · USD: {source("AI_DAILY_USD_LIMIT")}</p></dd></div>
+        <div><dt>Contato de notificações</dt><dd>{ai.pushContact.state} · Origem: {ai.pushContact.source}</dd></div>
+        <div><dt>Agenda</dt><dd>{schedule.error || `${schedule.enabled ? "Ativa" : "Pausada"} · ${schedule.expression} · ${schedule.timezone} · até ${schedule.maxRuns} coletas/24 h`}<p className="field-help">Origem: {schedule.origin}</p></dd></div>
+        <div><dt>Edições gerais</dt><dd>{editionSchedule.error || `${editionSchedule.enabled ? "Ativas" : "Pausadas"} · 08h e 16h · ${editionSchedule.timezone}`}<p className="field-help">Origem: {editionSchedule.origin === "interface" ? "interface" : editionSchedule.needsTimezone ? "padrão; confirme o fuso" : `fuso herdado (${editionSchedule.origin})`}</p></dd></div>
+      </dl>
+      {ai.ignoredContainerAI.length > 0 && <p className="warning-text">Os valores AI_* do ambiente do contêiner foram ignorados porque o arquivo de configuração existe. Complete os valores no arquivo.</p>}
       {ai.state === "invalid" && <p className="warning-text" role="alert">{ai.message}</p>}
-      <p>No Docker, preencha <code>/config/orbit.env</code>; fora dele, copie <code>.env.example</code> para <code>.env</code>. Parâmetros de IA são relidos automaticamente. Portas, contato de push e outros parâmetros de inicialização exigem reiniciar o app.</p>
+      <p>No Docker, preencha <code>/config/orbit.env</code>; fora dele, copie <code>.env.example</code> para <code>.env</code>.</p>
+      <p>Valores do arquivo valem na próxima leitura, sem reiniciar. Valores definidos no ambiente do contêiner exigem recriar o contêiner. Hosts permitidos, porta e banco ficam só no ambiente.</p>
       <div className="protocol-examples"><div><h3>OpenAI Compatible</h3><pre>{`AI_PROTOCOL=openai\nAI_BASE_URL=https://seu-endpoint.example/v1\nAI_API_KEY=sua-chave\nAI_MODEL=id-do-seu-modelo`}</pre></div><div><h3>Anthropic Compatible</h3><pre>{`AI_PROTOCOL=anthropic\nAI_BASE_URL=https://seu-endpoint.example\nAI_API_KEY=sua-chave\nAI_MODEL=id-do-seu-modelo`}</pre></div></div>
       <p className="field-help">A URL aceita HTTP ou HTTPS, inclusive IP da rede local ou nome do serviço Docker. HTTP envia chave e textos sem criptografia: use apenas em rede confiável. Inclua o prefixo exigido pelo serviço; o SDK Anthropic acrescenta /v1/messages. Você define os modelos; não há troca automática de fornecedor.</p>
       <h3>Modelo de briefing</h3>
-      <p className="field-help">{ai.briefingReady ? "Configuração do modelo de briefing carregada." : "Modelo de briefing ainda não configurado ou inválido."}</p>
+      <p className="field-help">{ai.briefing.reason || "Configuração do modelo de briefing carregada."}</p>
       <p>Defina <code>AI_BRIEFING_MODEL</code> para os briefings pessoal e geral. Ambos usam o protocolo, a URL e a chave escolhidos por você.</p>
       <pre>{`AI_BRIEFING_MODEL=id-do-modelo-de-briefing\nAI_BRIEFING_INPUT_USD_PER_MILLION=\nAI_BRIEFING_OUTPUT_USD_PER_MILLION=`}</pre>
       <p className="field-help">Com teto em USD, informe os preços próprios do modelo. Classificação e briefings compartilham o orçamento diário.</p>

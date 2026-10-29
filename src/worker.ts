@@ -4,9 +4,9 @@ import { queueScheduledRun, readSchedule } from "./lib/scheduler";
 import { queueDueEdition, readEditionSchedule } from "./lib/editions";
 import { drainPush } from "./lib/push";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDatabase } from "./db/index";
-import { collectorRuns, settings } from "./db/schema";
+import { collectorRuns, editions, settings } from "./db/schema";
 import { acquireLease, assertLease, claimRun, recoverRuns, setSetting } from "./lib/store";
 import { runWithConfiguredAI } from "./lib/run";
 
@@ -66,6 +66,7 @@ try {
               assertActive();
               const message = "Execução interrompida. Confira a configuração de IA no servidor (.env ou orbit.env) e tente novamente.";
               setSetting(db, "ai_notice", message);
+              if (run.editionId) db.update(editions).set({ status: "error", notice: message }).where(and(eq(editions.id, run.editionId), eq(editions.status, "running"))).run();
               db.update(collectorRuns).set({ status: "error", error: message, finishedAt: Date.now() }).where(eq(collectorRuns.id, run.id)).run();
             }, { behavior: "immediate" });
           } catch { active = false; stopping = true; }
@@ -74,7 +75,10 @@ try {
       if (!stopping && active) {
         controller = new AbortController();
         try { await drainPush(db, assertActive, controller.signal); }
-        catch { active = false; stopping = true; }
+        catch {
+          try { assertActive(); console.error("Falha ao enviar notificações; nova tentativa no próximo ciclo."); }
+          catch { active = false; stopping = true; }
+        }
         finally { controller = undefined; }
       }
     }

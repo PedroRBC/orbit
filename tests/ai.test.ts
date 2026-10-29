@@ -3,7 +3,8 @@ import { createServer, type Server } from "node:http";
 import { getAIConfig, getBriefingConfig } from "../src/lib/config";
 import { requestClassification } from "../src/ai/provider";
 import { validateClassification } from "../src/ai/classify";
-import { THEME_IDS } from "../src/lib/taxonomy";
+import { SEED_IDS } from "../src/lib/taxonomy";
+const themeIds = new Set(SEED_IDS);
 
 const servers: Server[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); await Promise.all(servers.splice(0).map(server => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }))); });
@@ -86,15 +87,25 @@ describe("configuração e protocolos", () => {
     expect(outcome).toBe("aborted");
   });
   it("aceita apenas IDs do catálogo como tema da IA, não aliases ou rótulos livres", () => {
-    for (const theme of THEME_IDS) expect(validateClassification(JSON.stringify({ items: [{ ...result.items[0], theme }] }), [result.items[0].id])[0].theme).toBe(theme);
+    for (const theme of SEED_IDS) expect(validateClassification(JSON.stringify({ items: [{ ...result.items[0], theme }] }), [result.items[0].id], themeIds)[0].theme).toBe(theme);
     for (const theme of ["Ciência", "Technology", "Política brasileira", "novo-assunto", "__proto__", "", "TECNOLOGIA"]) {
-      expect(() => validateClassification(JSON.stringify({ items: [{ ...result.items[0], theme }] }), [result.items[0].id])).toThrow();
+      expect(() => validateClassification(JSON.stringify({ items: [{ ...result.items[0], theme }] }), [result.items[0].id], themeIds)).toThrow();
     }
   });
+  it("aceita IDs dinâmicos e newTheme sem validar seu rótulo no schema", () => {
+    const input = { items: [{ ...result.items[0], theme: "automotivo", newTheme: { label: "Eleições 2026", aliases: ["Carros"], extra: true } }] };
+    expect(validateClassification(JSON.stringify(input), [result.items[0].id], new Set([...SEED_IDS, "automotivo"]))[0]).toMatchObject({ theme: "automotivo", newTheme: { label: "Eleições 2026", aliases: ["Carros"] } });
+    expect(() => validateClassification(JSON.stringify(input), [result.items[0].id], themeIds)).toThrow();
+  });
+  it("limita aliases de newTheme a oito", () => {
+    const input = (length: number) => JSON.stringify({ items: [{ ...result.items[0], newTheme: { label: "Automotivo", aliases: Array(length).fill("Carros") } }] });
+    expect(validateClassification(input(8), [result.items[0].id], themeIds)[0].newTheme?.aliases).toHaveLength(8);
+    expect(() => validateClassification(input(9), [result.items[0].id], themeIds)).toThrow();
+  });
   it("rejeita respostas incompletas, repetidas e IDs não solicitados", () => {
-    expect(validateClassification(JSON.stringify(result), ["youtube:abcdefghijk"])).toEqual(result.items);
-    expect(() => validateClassification(JSON.stringify(result), ["outro"])).toThrow();
-    expect(() => validateClassification(JSON.stringify({ items: [result.items[0], result.items[0]] }), ["youtube:abcdefghijk"])).toThrow();
-    expect(() => validateClassification('{"items":[]}', ["youtube:abcdefghijk"])).toThrow();
+    expect(validateClassification(JSON.stringify(result), ["youtube:abcdefghijk"], themeIds)).toEqual(result.items);
+    expect(() => validateClassification(JSON.stringify(result), ["outro"], themeIds)).toThrow();
+    expect(() => validateClassification(JSON.stringify({ items: [result.items[0], result.items[0]] }), ["youtube:abcdefghijk"], themeIds)).toThrow();
+    expect(() => validateClassification('{"items":[]}', ["youtube:abcdefghijk"], themeIds)).toThrow();
   });
 });

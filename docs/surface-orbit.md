@@ -4,7 +4,7 @@ Modo: Read na leitura e no arquivo; Operate nos ajustes, nas fontes e no diagnó
 
 ## Direction contract
 
-THESIS: leitura antes da operação. Hoje apresenta o panorama e as recomendações pessoais; Briefings dá acesso ao arquivo de edições gerais; Temas apresenta as oito categorias e abre o recorte pessoal correspondente; interesses e pesos ficam em Meu perfil. Origem, cobertura e limites são parte da leitura, sem métricas decorativas.
+THESIS: leitura antes da operação. Hoje apresenta o briefing pessoal, com até três notícias RSS externas identificadas como complemento, e as recomendações pessoais; Briefings dá acesso ao arquivo de edições gerais e à geração sob demanda; Temas apresenta oito sementes, temas criados após três itens pessoais distintos (até 40 no catálogo), grupos em observação e junção de temas criados; interesses e pesos ficam em Meu perfil. Origem, cobertura e limites são parte da leitura, sem métricas decorativas.
 
 OWN-WORLD: preservar a estante de fichas de leitura noturna. Fundo azul-ardósia, rail azul profundo, texto claro e seleção lavanda suave. Tipografia de sistema, sem requisições de fontes. Lucide, bordas finas e controles familiares. Sem vidro, glow, gradientes, sombras decorativas ou imagens geradas.
 

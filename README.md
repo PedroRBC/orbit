@@ -8,16 +8,15 @@ Não confunda o que seus feeds mostram com uma visão completa do mundo. O Orbit
 
 `AI_BASE_URL` agora aceita HTTP fora de localhost, inclusive IP da LAN e hostname de serviço Docker, sem flag adicional. Isso permite usar o CliProxyApi na rede do NAS. HTTP envia chave e textos sem criptografia: use apenas em rede confiável. Login, RSS e Web Push não mudam. A tag `v0.2.2` publica `0.2.2` e `latest` no GHCR privado, após CI aprovada, sem alterar o NAS ou fazer merge na main.
 
-## Evolução editorial desde 0.2.1
+## Evolução em desenvolvimento — não publicada
 
-Esta versão acrescenta apresentação editorial, oito temas controlados, **briefings gerais às 08h/16h** e **Web Push na PWA**. O serviço continua privado, com login e um único usuário. A publicação usa a tag `v0.2.1` e o destino privado existente; a imagem só deve ser considerada disponível após a CI concluir testes e verificações de privacidade/tags/digest. Nenhuma alteração no NAS faz parte desta publicação.
+Sobre a base `0.2.2`, esta worktree acrescenta configuração reconhecida, briefings sob demanda, RSS como complemento do briefing pessoal, temas automáticos e correções de Web Push. **Essas mudanças ainda não estão na imagem `0.2.2`**; versão e imagem padrão permanecem intactas. Não houve publicação nem alteração no NAS nesta etapa. Escopo aprovado: [especificação](docs/superpowers/specs/2026-10-28-briefings-push-themes-design.md) e [plano](docs/superpowers/plans/2026-10-28-briefings-push-themes.md).
 
-- [Taxonomia e consolidação auditada](docs/taxonomy.md): IDs fixos, aliases e pesos combinados por média, sem reclassificação paga. Faça backup antes de atualizar um banco real.
-- [Briefings gerais](docs/briefings.md): fontes públicas escolhidas por você, fechamento/período/fuso visíveis, arquivo autenticado e agenda independente dos feeds pessoais.
-- [Web Push e instalação por aparelho](docs/push.md): configurar `ORBIT_PUSH_SUBJECT`, ativar no clique, testar, desativar e entender os limites Android/iOS.
-- [Validação desta evolução e roteiro no celular](docs/validation-editorial.md).
+- [Catálogo de temas e consolidação auditada](docs/taxonomy.md): oito sementes, novos temas após três itens pessoais distintos, até 40 temas e junção pela interface. Faça backup antes da migração v2; voltar à `0.2.2` exige restaurá-lo.
+- [Briefings pessoais e gerais](docs/briefings.md): atualização pessoal sem coletar fontes, edição geral sob demanda e horários 08h/16h, com orçamento diário compartilhado.
+- [Web Push e instalação por aparelho](docs/push.md): contato também em `orbit.env`, diagnóstico por aparelho, prazo de 30 segundos, limites do Helium e roteiro Android.
 
-Em **Configurações → Briefings gerais**, confirme o fuso e ative os horários. Sem fuso explícito, a proposta é `America/Sao_Paulo`, sem ativação silenciosa. RSS externos nunca entram nas recomendações ou no briefing pessoais. Para push no Docker, o contato é variável do contêiner, não uma chave `AI_*` de `orbit.env`.
+Em **Configurações → Briefings gerais**, confirme o fuso e ative os horários. Sem fuso explícito, a proposta é `America/Sao_Paulo`, sem ativação silenciosa. Até três notícias externas marcadas podem complementar o briefing pessoal; nunca entram em **Vale a pena ver**. O serviço continua privado, com login e um único usuário. Testes físicos no celular e no NAS continuam pendentes.
 
 ## Docker, TrueNAS e celular
 
@@ -102,9 +101,9 @@ Instagram e Valete têm testes sintéticos em Chromium. Também houve teste assi
 
 Em **Fontes → Notícias externas**, cadastre RSS/Atom públicos em HTTPS. Nenhum portal é habilitado por padrão. Até dez feeds, com títulos/trechos e links, sem baixar artigos ou imagens. Não forneça credenciais ou URLs privadas.
 
-A seção **Fora da bolha** mostra até três itens coletados nas últimas 48 horas. Com IA, prioriza temas diferentes da amostra pessoal e diversidade entre os selecionados; a nota dessas notícias usa importância geral, não o perfil pessoal. Sem IA, exibe manchetes/trechos originais e declara que não há análise. Não inventa notas nem notícias para completar a lista. Esse recorte não prova que seu algoritmo omitiu um assunto, nem é checagem de fatos.
+A seção **Fora da bolha** mostra até três itens com publicação comprovada (`newsPublishedAt`) nas últimas 48 horas, sem datas futuras, e exclui notícias já citadas no briefing pessoal mais recente antes de limitar os candidatos. Com IA, prioriza temas diferentes da amostra pessoal e diversidade entre os selecionados; a nota dessas notícias usa importância geral, não o perfil pessoal. Sem IA, exibe manchetes/trechos originais e declara que não há análise. Não inventa notas nem notícias para completar a lista. Esse recorte não prova que seu algoritmo omitiu um assunto, nem é checagem de fatos.
 
-Notícias externas são excluídas do briefing pessoal e de “Vale a pena ver”. Links diretos às quatro plataformas sociais não entram como notícias externas. URLs duplicadas são deduplicadas; um item fornecido por duas fontes continua vinculado às duas.
+Notícias externas continuam excluídas de **Vale a pena ver**. Até três notícias analisadas, sem spam, de fontes ativas e com publicação comprovada nas últimas 24 h podem complementar o briefing pessoal, sempre marcadas como externas; sem item pessoal elegível, ele não é gerado. Links diretos às quatro plataformas sociais não entram como notícias externas. URLs duplicadas são deduplicadas; um item fornecido por duas fontes continua vinculado às duas.
 
 Proteção de rede: hostname HTTPS, sem IP literal, credenciais ou porta especial. Todos os endereços DNS precisam ser públicos; a conexão usa o IP validado com SNI, Host e certificado do portal original. Cada redirect é validado novamente (máximo três). Bloqueia loopback, redes privadas, link-local, IPv4 mapeado e intervalos reservados, inclusive em DNS misto. Há teto de 2 MB, prazo absoluto de 20 segundos e recusa de DTD/entidades XML. Feeds que não entreguem XML sem compactação mesmo após pedir `identity` falham de forma isolada.
 
@@ -119,7 +118,7 @@ COLLECTOR_TIMEZONE=
 COLLECTOR_MAX_RUNS_PER_DAY=6
 ```
 
-Fuso vazio usa o sistema; exemplo explícito: `America/Sao_Paulo`. Valores salvos pela interface prevalecem sobre defaults do ambiente. `SCHEDULER_ENABLED=false` serve como padrão inicial desativado. Não há serviço instalado no sistema operacional: **app aberto é obrigatório**. Feeds pessoais exigem também o navegador com extensão conectada; RSS públicos continuam sem navegador.
+Fuso vazio usa o sistema; exemplo explícito: `America/Sao_Paulo`. Valores salvos pela interface prevalecem sobre padrões do arquivo e do ambiente. `COLLECTOR_CRON`, `COLLECTOR_TIMEZONE`, `COLLECTOR_MAX_RUNS_PER_DAY`, `COLLECTOR_MAX_ITEMS` e `SCHEDULER_ENABLED` também podem ficar em `orbit.env`; valores não vazios do arquivo prevalecem sobre os do ambiente. `SCHEDULER_ENABLED=false` serve como padrão inicial desativado. Não há serviço instalado no sistema operacional: **app aberto é obrigatório**. Feeds pessoais exigem também o navegador com extensão conectada; RSS públicos continuam sem navegador.
 
 O worker só enfileira com seu lease, fontes ativas e nenhuma coleta pendente/em andamento. Respeita cinco minutos desde a coleta anterior e, por padrão, no máximo seis execuções automáticas em 24 horas (configurável entre 1 e 12). Horários repetidos pelo fim do horário de verão não duplicam a execução. A agenda não recupera em lote todos os horários em que a máquina esteve desligada. Uma execução interrompida já na fila pode ser retomada sem duplicar itens concluídos.
 
@@ -127,7 +126,9 @@ Mudanças de agenda são aplicadas após a execução atual. Cron/fuso inválido
 
 ## Configurar sua IA
 
-Configurações de IA são relidas de `.env` (e `.env.local`, se existir) no início de cada análise e na tela, sem manter a cópia antiga herdada pelo worker. Esses arquivos prevalecem para os campos `AI_*`. Remover uma chave/modelo do arquivo desabilita a configuração, sem reutilizar o valor antigo. Portas, banco e outros parâmetros de inicialização ainda exigem reiniciar. Para executar somente com variáveis exportadas, use `ORBIT_ENV_FILE=""`; os testes usam esse modo para nunca ler sua chave real.
+Site e worker usam o mesmo leitor: sem `ORBIT_ENV_FILE`, lê `.env` e depois `.env.local`; com caminho preenchido, lê só esse arquivo (no Docker, `/config/orbit.env`); com `ORBIT_ENV_FILE=""`, não lê arquivo. Se algum arquivo candidato existir, todos os `AI_*` do ambiente são ignorados. Remover uma chave/modelo do arquivo desabilita a configuração, sem reutilizar o valor antigo; arquivo ilegível deixa os `AI_*` ausentes, sem fallback. Para `ORBIT_PUSH_SUBJECT` e os cinco parâmetros de coleta/agenda permitidos, vale arquivo não vazio → ambiente não vazio → padrão. O leitor não altera `process.env`. Valores do arquivo valem na próxima leitura; mudar o ambiente do contêiner exige recriá-lo. Portas, hosts permitidos, banco e outros parâmetros de inicialização continuam só no ambiente; veja a [tabela de variáveis](docs/deploy.md#variáveis).
+
+Em **Configurações → Configuração reconhecida** (`/configuracoes#ia`), confira arquivo, origem dos valores, endpoint sem credenciais, presença da chave, modelos de classificação e briefing, limites, agenda e estado do contato Push. **Status** mostra os dois modelos e o último sucesso é consultado nos resultados persistidos. Falta de `AI_MODEL` também impede briefings; preços próprios são exigidos com teto em USD. O diagnóstico nunca mostra chave nem endereço de contato.
 
 A chave fica **somente no `.env` do servidor**. Nunca a cole em issues, commits ou conversas. Não há análise sem URL, chave e modelo configurados. Itens pessoais exigem perfil; notícias externas podem receber análise geral sem inventar interesses. A análise ocorre em atualizações manuais ou nos horários da agenda habilitada.
 
@@ -171,15 +172,19 @@ AI_BRIEFING_OUTPUT_USD_PER_MILLION=
 
 Com teto diário em USD, os dois preços próprios do modelo de briefing são obrigatórios. Sem `AI_BRIEFING_MODEL`, apenas o briefing fica desabilitado; coleta e classificação continuam funcionando.
 
-O worker seleciona até 8 itens relevantes, não spam, de fontes ativas e coletados nas últimas 24 horas. O modelo recebe títulos/descrições originais, resumos auxiliares e preferências. Agrupa o mesmo assunto, produz até 8 tópicos e cita somente IDs recebidos. Links são resolvidos pelo banco local, nunca inventados pelo modelo.
+O worker seleciona até 8 itens pessoais relevantes, não spam, de fontes ativas e coletados nas últimas 24 horas, mais até 3 notícias RSS analisadas com publicação comprovada na mesma janela. Pessoais entram primeiro no orçamento; externas não usam pesos pessoais, levam descrição de até 1.500 caracteres e podem ser omitidas pelo modelo. Os IDs pessoais enviados precisam aparecer exatamente uma vez; cada externo pode aparecer no máximo uma vez. O modelo recebe títulos/descrições, resumos auxiliares e preferências, produz até 8 tópicos e respeita os assuntos excluídos. Links vêm do banco, nunca da IA. O card separa as contagens e identifica fontes externas; sem externas, mostra o motivo persistido na geração.
 
 A meta é uma leitura de 1–2 minutos e 5–8 tópicos quando há material suficiente. Com poucos itens ou orçamento limitado, a amostra e o briefing ficam menores, explicitamente sinalizados. Publicações originais podem ser mais antigas que a coleta. Isso continua sendo um recorte do feed, não o noticiário mais importante do mundo nem uma checagem de fatos.
 
-O briefing é cacheado por dia UTC, snapshot dos itens, preferências, modelo, endpoint e prompt. Repetir o snapshot persistido não faz outra chamada, mesmo com saldo esgotado. Se o orçamento reduzir a seleção, o briefing mostra quantos candidatos ficaram de fora; esse recorte continua cacheado até mudar o conteúdo, o perfil ou o dia UTC. Apenas aumentar o teto não refaz o briefing. Falhas preservam o briefing anterior, que mostra sua data. Mudanças no perfil ou novos itens podem gerar um novo briefing na próxima atualização.
+O briefing é cacheado por snapshot dos itens candidatos, preferências, protocolo, modelo, endpoint e prompt, **sem incluir o dia UTC**. Repetir o snapshot persistido não faz outra chamada de geração, mesmo com saldo esgotado ou em outro dia; o dia continua no payload e no orçamento. Se o orçamento reduzir a seleção, o card informa o recorte. Apenas aumentar o teto não refaz o briefing. Falhas preservam o briefing anterior e sua data.
+
+**Atualizar briefing pessoal**, na Home, enfileira classificação de pendências e geração sem coletar fontes; exige interesses e configuração completa. **Gerar briefing geral agora**, no destaque Brasil e mundo ou em `/briefings`, exige fuso confirmado e gera uma edição das últimas 24 h com RSS públicos, sem push. Ambos usam a fila durável, o orçamento diário compartilhado e intervalo mínimo de cinco minutos por tipo; uma tarefa do mesmo tipo já pendente/em andamento impede outro pedido. A classificação de pendências pode consumir tokens mesmo quando o briefing pessoal em cache é reutilizado. Detalhes em [briefings.md](docs/briefings.md).
+
+Os oito temas base são sementes de um catálogo aberto: áreas amplas propostas em três itens pessoais distintos podem criar um tema, até 40 no total. RSS e spam não propõem temas. **Temas** mostra sementes, temas criados, até 20 grupos em observação e a ação **Juntar a outro tema**; Meu perfil e filtros usam o catálogo do banco, sem reclassificar itens pagos.
 
 Em cada recomendação: **Gostei**, **Não gostei**, **Salvar** e **Já vi**. O filtro Lista mostra salvos/vistos/não vistos. São ações somente no Orbit; nada é curtido ou salvo na plataforma original.
 
-**Meu perfil** mostra interesses editáveis e pesos por tema. Gostei soma 3, Não gostei subtrai 3, salvar soma 1 e o primeiro clique soma 1. Repetir um voto o desfaz; cliques repetidos não inflam o sinal. Já vi apenas organiza a lista. Pesos visíveis ficam entre -20 e 20 e ajustam o ranking em 2 pontos/unidade; a nota final fica entre 0 e 100. Valores podem ser editados e entram nos próximos prompts. A nota original fica em cache, sem reclassificação paga. Os sinais são somados antes de limitar o peso visível: acima do teto, sinais opostos podem reduzir o acúmulo antes de mudar a nota. Editar o peso redefine esse ponto de partida.
+**Meu perfil** mostra interesses editáveis e pesos por tema. Em itens pessoais, Gostei soma 3, Não gostei subtrai 3, salvar soma 1 e o primeiro clique soma 1. Feedback em notícias RSS continua salvo, mas não altera pesos pessoais; pesos antigos não são limpos. Repetir um voto o desfaz; cliques repetidos não inflam o sinal. Já vi apenas organiza a lista. Pesos visíveis ficam entre -20 e 20 e ajustam o ranking em 2 pontos/unidade; a nota final fica entre 0 e 100. Valores podem ser editados e entram nos próximos prompts. A nota original fica em cache, sem reclassificação paga. Os sinais são somados antes de limitar o peso visível: acima do teto, sinais opostos podem reduzir o acúmulo antes de mudar a nota. Editar o peso redefine esse ponto de partida.
 
 ## Limites e custos
 
@@ -204,7 +209,7 @@ AI_DAILY_USD_LIMIT=
 
 SQLite com WAL e migrações versionadas (`data/orbit.db`; `/data` no Docker). Usuário único, sempre com login: senha (scrypt) e código TOTP, ou um código de recuperação. A sessão é um cookie `__Host-` HttpOnly, Secure e SameSite=Strict, válido por 30 dias, com só o hash no banco. **Configurações → Acesso** permite sair deste dispositivo ou de todos; `npm run auth -- setup` troca senha e autenticador e encerra todas as sessões; `npm run auth -- logout-all` só encerra as sessões. Cinco erros seguidos bloqueiam aquele cliente (último endereço do `X-Forwarded-For`) por 15 minutos; não há bloqueio global, e `npm run auth -- unlock` limpa os bloqueios.
 
-Fora de localhost, o login só acontece por HTTPS: publique o Orbit atrás de um proxy reverso (Tailscale Serve, Nginx Proxy Manager, Caddy etc.) que preserve o `Host` e envie `X-Forwarded-Proto: https`. Liste o endereço em `ORBIT_ALLOWED_HOSTS`; outros Hosts recebem 403, o que impede DNS rebinding. Requisições de mutação de outra origem são recusadas, e cada Server Action valida a sessão por conta própria.
+Fora de localhost, o login só acontece por HTTPS: publique o Orbit atrás de um proxy reverso (Tailscale Serve, Nginx Proxy Manager, Caddy etc.) que preserve o `Host`, envie `X-Forwarded-Proto: https` e deixe `X-Forwarded-Host` ausente ou igual ao host público (incluindo a porta). Liste o endereço em `ORBIT_ALLOWED_HOSTS`; outros Hosts recebem 403, o que impede DNS rebinding. Requisições de mutação de outra origem são recusadas, e cada Server Action valida a sessão por conta própria.
 
 Backup consistente com o app ligado: `npm run db:backup` (veja [docs/deploy.md](docs/deploy.md) para Docker, restauração e rollback). `.env`, banco e perfis de navegador estão ignorados no Git e fora da imagem Docker.
 
@@ -220,13 +225,14 @@ Backup consistente com o app ligado: `npm run db:backup` (veja [docs/deploy.md](
 ## Testar e produção local
 
 ```bash
-npm test
-npm run typecheck
-npm run build
+ORBIT_ENV_FILE="" npm test
+ORBIT_ENV_FILE="" npm run typecheck
+ORBIT_ENV_FILE="" npm run check
+ORBIT_ENV_FILE="" npm run build
 npx playwright install chromium
-npm run test:e2e
+ORBIT_ENV_FILE="" DOTENV_CONFIG_PATH=/dev/null npm run test:e2e
 # Mesmo fluxo de navegador contra npm start, após o build:
-E2E_PRODUCTION=1 npm run test:e2e
+ORBIT_ENV_FILE="" DOTENV_CONFIG_PATH=/dev/null E2E_PRODUCTION=1 npm run test:e2e
 ```
 
 Os testes não usam API paga: exercitam SDKs contra servidor HTTP local e SQLite real isolado. O e2e inicia app e worker com banco em `test-results/`. A coleta de um canal real depende de rede/YouTube e não é garantida por fixtures.

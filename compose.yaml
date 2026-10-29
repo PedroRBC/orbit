@@ -1,4 +1,5 @@
 # Orbit em um contêiner: interface, worker e migrações. Veja docs/deploy.md.
+# Leitura ampliada de orbit.env exige build desta worktree; a imagem 0.2.2 lê só AI_*.
 services:
   orbit:
     image: ${ORBIT_IMAGE:-ghcr.io/pedrorbc/orbit:0.2.2}
@@ -17,10 +18,12 @@ services:
       - "${ORBIT_PORT:-30480}:3000"
     environment:
       TZ: ${TZ:-America/Sao_Paulo}
+      # Padrão de fuso; orbit.env não vazio e agenda salva na interface têm prioridade.
       COLLECTOR_TIMEZONE: ${COLLECTOR_TIMEZONE:-America/Sao_Paulo}
       # Hosts aceitos além de localhost (atrás do seu proxy HTTPS), separados por vírgula.
       ORBIT_ALLOWED_HOSTS: ${ORBIT_ALLOWED_HOSTS:-}
-      # Contato VAPID (mailto: ou HTTPS público). Vazio deixa o push desativado.
+      # Contato VAPID (mailto: ou HTTPS público), também aceito em /config/orbit.env.
+      # O valor não vazio do arquivo prevalece; ausente em ambos deixa o push desativado.
       ORBIT_PUSH_SUBJECT: ${ORBIT_PUSH_SUBJECT:-}
     volumes:
       # Sem caminho definido, usa volumes nomeados (teste local).

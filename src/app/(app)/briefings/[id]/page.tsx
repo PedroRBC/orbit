@@ -20,14 +20,15 @@ export default async function EditionPage({ params }: { params: Promise<{ id: st
   if (!edition) notFound();
   const items = edition.itemIds.length ? db.select().from(rawItems).where(inArray(rawItems.id, edition.itemIds)).all() : [];
   const active = edition.status === "queued" || edition.status === "running";
+  const displayTime = edition.edition === "manual" ? edition.generatedAt ?? edition.scheduledAt : edition.scheduledAt;
   return <>
     <WorkRefresh active={active}/>
     <Link href="/briefings" className="text-link"><ArrowLeft size={16} aria-hidden="true"/>Todas as edições</Link>
     <header className="edition-header">
       <h1>{editionLabel(edition.edition)}</h1>
-      <p className="edition-meta">Fechamento: <time dateTime={new Date(edition.scheduledAt).toISOString()}>{editionTime(edition.scheduledAt, edition.timezone)}</time> · {edition.timezone}</p>
+      <p className="edition-meta">{edition.edition === "manual" ? edition.generatedAt !== null ? "Gerada em" : "Solicitada em" : "Fechamento:"} <time dateTime={new Date(displayTime).toISOString()}>{editionTime(displayTime, edition.timezone)}</time> · {edition.timezone}</p>
       <p>Período coberto: {editionTime(edition.windowFrom, edition.timezone)} a {editionTime(edition.windowTo, edition.timezone)}.</p>
-      {edition.generatedAt && <p className="field-help">Gerada em {editionTime(edition.generatedAt, edition.timezone)}. {edition.generatedAt - edition.scheduledAt >= 60000 && "A geração ocorreu após o fechamento; notícias posteriores não foram incluídas."}</p>}
+      {edition.edition !== "manual" && edition.generatedAt && <p className="field-help">Gerada em {editionTime(edition.generatedAt, edition.timezone)}. {edition.generatedAt - edition.scheduledAt >= 60000 && "A geração ocorreu após o fechamento; notícias posteriores não foram incluídas."}</p>}
       {Date.now() - edition.windowTo > 86400000 && <p className="warning-text">Edição de arquivo. Os fatos abaixo se referem ao período indicado, não ao momento atual.</p>}
       <p className="field-help">Briefing geral · RSS públicos configurados · separado do feed pessoal. Os trechos disponíveis não substituem a leitura dos originais.</p>
     </header>

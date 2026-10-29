@@ -7,10 +7,9 @@ import { createCaptureJob, claimCaptureJob, revokeExtension } from "../../src/li
 import { resolve } from "node:path";
 import { eq } from "drizzle-orm";
 import { openDatabase } from "../../src/db/index";
-import { sources, processedItems, briefings, topics, rawItems, companionJobs, collectorRuns, aiCalls } from "../../src/db/schema";
+import { sources, processedItems, briefings, topics, rawItems, companionJobs, collectorRuns, aiCalls, interestProfile } from "../../src/db/schema";
 import { enqueueCollection, saveRawItems } from "../../src/lib/store";
 import { sessionCookie, totpCode } from "../../src/lib/auth";
-import { normalizeTheme } from "../../src/lib/taxonomy";
 
 test("configura interesses, adiciona fonte e funciona em desktop e celular", async ({ page }) => {
   await page.goto("/");
@@ -44,7 +43,7 @@ test("configura interesses, adiciona fonte e funciona em desktop e celular", asy
   await page.getByRole("link", { name: "Status", exact: true }).click();
   await page.getByRole("button", { name: "Atualizar fontes" }).click();
   await expect(page.getByText("Concluída", { exact: true }).first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText("Configure URL, chave e modelo no .env (orbit.env no Docker)", { exact: true })).toBeVisible();
+  await expect(page.getByText("Configure AI_BASE_URL no .env (orbit.env no Docker)", { exact: true })).toBeVisible();
   await page.screenshot({ path: ".impeccable/review/desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: ".impeccable/review/mobile.png", fullPage: true });
@@ -54,14 +53,33 @@ test("configura interesses, adiciona fonte e funciona em desktop e celular", asy
   await expect(page.getByLabel("Seus interesses")).toHaveValue("Ciência, tecnologia e educação");
 });
 
+test("configuração reconhecida sem segredos", async ({ page }) => {
+  await page.goto("/configuracoes#ia");
+  await expect(page.getByRole("heading", { name: "Configuração reconhecida", exact: true })).toBeVisible();
+  const panel = page.locator("#ia");
+  await expect(panel.locator("dt").filter({ hasText: /^Modelo de classificação$/ })).toBeVisible();
+  await expect(panel.locator("dt").filter({ hasText: /^Modelo de briefing$/ })).toBeVisible();
+  await expect(panel.locator("dt")).toHaveText(["Arquivo", "Protocolo", "Endpoint", "Chave", "Modelo de classificação", "Modelo de briefing", "Limites", "Contato de notificações", "Agenda", "Edições gerais"]);
+  await expect(panel.locator("dt").filter({ hasText: /^Chave$/ }).locator("..")).toContainText("definida · Origem: ambiente");
+  await expect(panel.getByText("Nenhum sucesso com este modelo ainda", { exact: true })).toHaveCount(2);
+  await expect(panel).toContainText("Valores do arquivo valem na próxima leitura, sem reiniciar.");
+  const key = test.info().config.webServer?.env?.AI_API_KEY;
+  expect(key).toBeTruthy();
+  expect(await page.content()).not.toContain(key!);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.goto("/status");
+  await expect(page.getByRole("link", { name: /^Classificação: .* · Briefing: / })).toHaveAttribute("href", "/configuracoes#ia");
+});
+
 test("renderiza ranking e filtros com fixtures sintéticas somente no banco de teste", async ({ page }) => {
   const db = openDatabase(resolve("test-results/e2e.db"));
   const source = db.select().from(sources).where(eq(sources.kind, "youtube_rss")).get()!;
   db.update(sources).set({ enabled: true }).where(eq(sources.id, source.id)).run();
-  for (const [index, theme, score] of [[0, "Ciência", 95], [1, "Tecnologia", 60]] as const) {
+  for (const [index, theme, label, score] of [[0, "ciencia-saude", "Ciência", 95], [1, "tecnologia", "Tecnologia", 60]] as const) {
     const id = `orbitvideo${index}`;
-    saveRawItems(db, source.id, [{ platform: "youtube", externalId: id, title: `Fixture sintética ${theme}`, text: "Conteúdo somente para teste automatizado.", author: "Canal de teste", url: `https://www.youtube.com/watch?v=${id}`, thumbnail: null, publishedAt: Date.now(), durationSeconds: null }]);
-    db.insert(processedItems).values({ rawId: `youtube:${id}`, theme: normalizeTheme(theme)!, tone: "informativo", language: "pt", type: "educação", score, reason: "Justificativa sintética para verificar a interface.", summary: "Resumo de teste, não uma recomendação real.", isSpam: false, model: "fixture", processedAt: Date.now() }).run();
+    saveRawItems(db, source.id, [{ platform: "youtube", externalId: id, title: `Fixture sintética ${label}`, text: "Conteúdo somente para teste automatizado.", author: "Canal de teste", url: `https://www.youtube.com/watch?v=${id}`, thumbnail: null, publishedAt: Date.now(), durationSeconds: null }]);
+    db.insert(processedItems).values({ rawId: `youtube:${id}`, theme, tone: "informativo", language: "pt", type: "educação", score, reason: "Justificativa sintética para verificar a interface.", summary: "Resumo de teste, não uma recomendação real.", isSpam: false, model: "fixture", processedAt: Date.now() }).run();
   }
   const briefing = db.insert(briefings).values({ snapshot: "fixture-only", introduction: "Este briefing sintético serve apenas ao teste automatizado. Não descreve notícias reais.", createdAt: Date.now(), windowFrom: Date.now() - 86400000, windowTo: Date.now(), model: "fixture", sourceCount: 2, candidateCount: 3, budgetLimited: true }).returning().get();
   for (const [index, theme] of [[0, "Ciência"], [1, "Tecnologia"]] as const) db.insert(topics).values({ id: `fixture-topic-${index}`, briefingId: briefing.id, position: index, title: `Tópico sintético ${theme}`, summary: "Resumo de tópico sintético para verificar fontes e leitura. Não é notícia real.", itemIds: JSON.stringify([`youtube:orbitvideo${index}`]) }).run();
@@ -108,6 +126,54 @@ test("salva, marca visto e aprende feedback no Meu perfil", async ({ page }) => 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: ".impeccable/review/profile-mobile.png", fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("tema criado aparece em Temas e pode ser juntado", async ({ page }) => {
+  const db = openDatabase(resolve("test-results/e2e.db"));
+  const profile = db.select().from(interestProfile).get();
+  const personal = db.insert(sources).values({ channelId: "task7-personal-fixture", name: "Fonte sintética de temas" }).returning().get();
+  const news = db.insert(sources).values({ channelId: "https://task7.example.com/rss", name: "RSS sintético de temas", kind: "news_rss", platform: "news" }).returning().get();
+  try {
+    db.insert(interestProfile).values({ id: 1, interests: "Interesses sintéticos", excluded: "", updatedAt: 1 }).onConflictDoNothing().run();
+    db.$client.prepare("INSERT INTO taxonomy_themes (id, label, origin, created_at) VALUES ('automotivo', 'Automotivo', 'ai', ?)").run(Date.UTC(2026, 9, 28, 12));
+    for (const [source, platform] of [[personal, "youtube"], [news, "news"]] as const) {
+      const externalId = `task7-${platform}`;
+      saveRawItems(db, source.id, [{ platform, externalId, title: `Tema sintético ${platform}`, text: "Conteúdo apenas de teste.", author: "Fonte sintética", url: `https://task7.example.com/${externalId}`, thumbnail: null, publishedAt: Date.now(), newsPublishedAt: platform === "news" ? Date.now() : null, durationSeconds: null }]);
+      db.insert(processedItems).values({ rawId: `${platform}:${externalId}`, theme: "automotivo", tone: "informativo", language: "pt", type: "educação", score: 80, reason: "Teste", summary: "Resumo sintético", isSpam: false, model: "fixture", processedAt: 1 }).run();
+    }
+    await page.goto("/perfil#temas");
+    await expect(page.getByRole("spinbutton", { name: "Peso de Automotivo", exact: true })).toHaveValue("0");
+    await page.goto("/?tema=automotivo&periodo=all");
+    const recommendations = page.getByRole("region", { name: "Vale a pena ver", exact: true });
+    await expect(recommendations.getByRole("article")).toHaveCount(1);
+    await expect(recommendations.locator(".topic-tag")).toHaveText("Automotivo");
+    await expect(page.getByRole("region", { name: "Fora da bolha", exact: true }).getByRole("article").filter({ hasText: "Tema sintético news" })).toContainText("Automotivo");
+    await expect(page.getByRole("combobox", { name: "Tema", exact: true })).toHaveValue("automotivo");
+    await page.goto("/temas");
+    const created = page.locator(".edition-list > section").filter({ has: page.getByRole("link", { name: "Automotivo", exact: true }) });
+    await expect(created).toContainText("Criado automaticamente em 28/10/2026");
+    await expect(created).toContainText("1 item pessoal disponível");
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await created.getByRole("combobox", { name: "Juntar a outro tema" }).selectOption("outros");
+    await created.getByRole("button", { name: "Juntar", exact: true }).click();
+    await expect(page.locator(".edition-list").getByRole("link", { name: "Automotivo", exact: true })).toHaveCount(0);
+    expect(db.$client.prepare("SELECT DISTINCT theme FROM processed_items WHERE rawId IN ('youtube:task7-youtube', 'news:task7-news')").pluck().all()).toEqual(["outros"]);
+    await page.goto("/perfil#temas");
+    await expect(page.getByRole("spinbutton", { name: "Peso de Automotivo", exact: true })).toHaveCount(0);
+  } finally {
+    db.$client.exec(`DELETE FROM taxonomy_reassignments WHERE raw_id IN ('youtube:task7-youtube', 'news:task7-news');
+      DELETE FROM taxonomy_item_audit WHERE raw_id IN ('youtube:task7-youtube', 'news:task7-news');
+      DELETE FROM source_items WHERE rawId IN ('youtube:task7-youtube', 'news:task7-news');
+      DELETE FROM processed_items WHERE rawId IN ('youtube:task7-youtube', 'news:task7-news');
+      DELETE FROM raw_items WHERE id IN ('youtube:task7-youtube', 'news:task7-news');
+      DELETE FROM taxonomy_themes WHERE id = 'automotivo';`);
+    for (const source of [personal, news]) db.delete(sources).where(eq(sources.id, source.id)).run();
+    db.$client.prepare("UPDATE taxonomy_themes SET aliases = (SELECT json_group_array(value) FROM json_each(aliases) WHERE value <> 'Automotivo') WHERE id = 'outros'").run();
+    if (profile) db.update(interestProfile).set(profile).where(eq(interestProfile.id, 1)).run();
+    else db.delete(interestProfile).run();
+    db.$client.close();
+  }
 });
 
 test("ativa e pausa feeds de navegador sem abrir contas reais", async ({ page }) => {
@@ -249,7 +315,7 @@ test("configura RSS externo, separa Fora da bolha e persiste a agenda pausada", 
   const db = openDatabase(resolve("test-results/e2e.db"));
   const source = db.select().from(sources).where(eq(sources.channelId, "https://news.example.com/rss")).get()!;
   for (const [index, theme] of [[0, "Saúde"], [1, "Mundo"], [2, "Sem IA"]] as const) {
-    saveRawItems(db, source.id, [{ platform: "news", evidence: "news_rss", externalId: `fixture-external-${index}`, title: `Manchete externa sintética ${theme}`, text: "Trecho do portal usado apenas em teste automatizado.", author: "Portal sintético", url: `https://news.example.com/article-${index}`, thumbnail: null, publishedAt: Date.now(), durationSeconds: null }]);
+    saveRawItems(db, source.id, [{ platform: "news", evidence: "news_rss", externalId: `fixture-external-${index}`, title: `Manchete externa sintética ${theme}`, text: "Trecho do portal usado apenas em teste automatizado.", author: "Portal sintético", url: `https://news.example.com/article-${index}`, thumbnail: null, publishedAt: Date.now(), newsPublishedAt: Date.now(), durationSeconds: null }]);
     if (index < 2) db.insert(processedItems).values({ rawId: `news:fixture-external-${index}`, theme: index === 0 ? "ciencia-saude" : "politica-externa", tone: "informativo", language: "pt", type: "notícia", score: 80, reason: "Interesse público sintético", summary: "Resumo apenas para teste, não notícia real.", isSpam: false, model: "fixture", processedAt: Date.now() }).run();
   }
   db.$client.close();

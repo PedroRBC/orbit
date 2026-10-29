@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createECDH, randomBytes } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -28,13 +28,6 @@ const databases: OrbitDB[] = [];
 const directories: string[] = [];
 function database(path = ":memory:") {
   const db = openDatabase(path); databases.push(db);
-  // Fixture da migração de integração; o código de produção nunca cria tabelas em runtime.
-  db.$client.exec(`
-    CREATE TABLE IF NOT EXISTS push_subscriptions (id TEXT PRIMARY KEY NOT NULL, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL, createdAt INTEGER NOT NULL);
-    CREATE TABLE IF NOT EXISTS push_deliveries (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, subscriptionId TEXT NOT NULL, editionId INTEGER NOT NULL, kind TEXT NOT NULL DEFAULT 'edition', status TEXT NOT NULL DEFAULT 'queued', createdAt INTEGER NOT NULL, attemptedAt INTEGER);
-    CREATE UNIQUE INDEX IF NOT EXISTS push_deliveries_edition ON push_deliveries (subscriptionId, editionId) WHERE kind = 'edition';
-    CREATE INDEX IF NOT EXISTS push_deliveries_status ON push_deliveries (status, id);
-  `);
   return db;
 }
 function subscription(token = "synthetic-token") {
@@ -70,11 +63,52 @@ afterEach(() => {
 });
 
 describe("configuração e inscrições Web Push", () => {
+  it("endpoint fora da lista não derruba a configuração", () => {
+    const state = pushConfiguration(database(), "https://wns2-par02p.notify.windows.com/w/?token=abc");
+    expect(state.publicKey).toHaveLength(87);
+    expect(state.subscribed).toBe(false);
+    expect(state.lastDelivery).toBeNull();
+  });
+  it("remover endpoint inválido é no-op", () => {
+    const { db } = subscribed();
+    const before = db.select().from(pushSubscriptions).all();
+    expect(() => removePushSubscription(db, "https://exemplo.org/x")).not.toThrow();
+    expect(db.select().from(pushSubscriptions).all()).toEqual(before);
+  });
+  it("último envio deste aparelho sem endpoint", async () => {
+    const { db, input } = subscribed();
+    queuePushTest(db, input.endpoint, null);
+    const queuedAt = db.select().from(pushDeliveries).get()!.createdAt;
+    expect(pushConfiguration(db, input.endpoint).lastDelivery).toEqual({ kind: "test", status: "queued", at: queuedAt });
+    vi.setSystemTime(queuedAt + 1000);
+    await drainPush(db, () => {});
+    const state = pushConfiguration(db, input.endpoint);
+    expect(state.lastDelivery).toEqual({ kind: "test", status: "sent", at: queuedAt + 1000 });
+    expect(JSON.stringify(state)).not.toContain(input.endpoint);
+    expect(pushConfiguration(db).lastDelivery).toBeNull();
+    expect(pushConfiguration(db, subscription("other-device").endpoint).lastDelivery).toBeNull();
+    queueEditionPush(db, 42);
+    expect(pushConfiguration(db, input.endpoint).lastDelivery).toMatchObject({ kind: "edition", status: "queued" });
+  });
+  it("informa se o worker tem sinal recente", () => {
+    const db = database();
+    setSetting(db, "worker_heartbeat", String(Date.now()));
+    expect(pushConfiguration(db).workerOnline).toBe(true);
+    vi.setSystemTime(Date.now() + 30_000);
+    expect(pushConfiguration(db).workerOnline).toBe(false);
+  });
+  it("contato de push vindo do arquivo", () => {
+    const path = mkdtempSync(join(tmpdir(), "orbit-push-env-")); directories.push(path);
+    const file = join(path, "orbit.env"); writeFileSync(file, "ORBIT_PUSH_SUBJECT=mailto:orbit@exemplo.org\n");
+    vi.stubEnv("ORBIT_ENV_FILE", file); vi.stubEnv("ORBIT_PUSH_SUBJECT", "");
+    expect(pushConfiguration(database()).publicKey).toHaveLength(87);
+  });
   it("gera VAPID uma vez, persiste e só devolve a chave pública", () => {
     const db = database();
     const first = pushConfiguration(db);
     const stored = getSetting(db, "push_vapid");
     expect(first.publicKey).toHaveLength(87);
+    expect(first).toMatchObject({ contact: "ok", workerOnline: false, lastDelivery: null });
     expect(pushConfiguration(db)).toEqual(first);
     expect(getSetting(db, "push_vapid")).toBe(stored);
     const keys = JSON.parse(stored!);
@@ -87,6 +121,7 @@ describe("configuração e inscrições Web Push", () => {
     vi.stubEnv("ORBIT_PUSH_SUBJECT", subject);
     expect(pushConfiguration(db).publicKey).toBeNull();
     expect(pushConfiguration(db).message).toContain("ORBIT_PUSH_SUBJECT");
+    expect(pushConfiguration(db).contact).toBe(subject ? "inválido" : "ausente");
     await drainPush(db, () => {});
     expect(network.request).not.toHaveBeenCalled();
     expect(db.select().from(pushDeliveries).get()?.status).toBe("queued");
@@ -135,6 +170,13 @@ describe("configuração e inscrições Web Push", () => {
 });
 
 describe("outbox de edições e envio at-most-once", () => {
+  it("drainPush ocioso não abre transação de escrita", async () => {
+    const db = database();
+    const transaction = vi.spyOn(db, "transaction");
+    await drainPush(db, () => {});
+    expect(transaction).not.toHaveBeenCalled();
+    expect(getSetting(db, "push_vapid")).toBeUndefined();
+  });
   it("a fila acompanha rollback da edição e é única por inscrição/edição", () => {
     const { db } = subscribed();
     expect(() => db.transaction(() => { queueEditionPush(db, 1); throw new Error("rollback"); })).toThrow();
@@ -220,11 +262,26 @@ describe("outbox de edições e envio at-most-once", () => {
     expect(network.request).not.toHaveBeenCalled();
     expect(db.select().from(pushDeliveries).get()?.status).toBe("failed");
   });
-  it("não envia se o aparelho foi desativado enquanto resolvia DNS", async () => {
+  it("inscrição removida na fronteira vira cancelled", async () => {
     const { db, input } = subscribed(); queueEditionPush(db, 1);
-    network.lookup.mockImplementation(async () => { removePushSubscription(db, input.endpoint); return [{ address: "8.8.8.8", family: 4 }]; });
+    network.lookup.mockImplementation(async () => {
+      expect(db.select().from(pushDeliveries).get()?.status).toBe("attempted");
+      removePushSubscription(db, input.endpoint);
+      return [{ address: "8.8.8.8", family: 4 }];
+    });
     await drainPush(db, () => {});
     expect(network.request).not.toHaveBeenCalled();
+    expect(db.select().from(pushDeliveries).get()?.status).toBe("cancelled");
+  });
+  it("entrega vencida na fronteira vira expired", async () => {
+    const { db } = subscribed(); queueEditionPush(db, 1);
+    network.lookup.mockImplementation(async () => {
+      vi.setSystemTime(Date.now() + 3600_001);
+      return [{ address: "8.8.8.8", family: 4 }];
+    });
+    await drainPush(db, () => {});
+    expect(network.request).not.toHaveBeenCalled();
+    expect(db.select().from(pushDeliveries).get()?.status).toBe("expired");
   });
   it("não remove uma inscrição renovada por causa de resposta 410 da antiga", async () => {
     const { db, input } = subscribed(); queueEditionPush(db, 1); respond(410);
@@ -310,6 +367,16 @@ describe("outbox de edições e envio at-most-once", () => {
 });
 
 describe("Server Actions protegidas", () => {
+  it.each([false, true])("teste avisa o estado online=%s do worker sem impedir a fila", async online => {
+    const { db, input } = subscribed(); vi.spyOn(databaseModule, "getDatabase").mockReturnValue(db);
+    if (online) setSetting(db, "worker_heartbeat", String(Date.now()));
+    const result = await testPush(input.endpoint, null);
+    expect(result).toEqual({ message: online
+      ? "Teste na fila do worker. Você pode fechar o Orbit; a entrega depende do navegador e do sistema."
+      : "Teste na fila, mas o worker está sem sinal recente; ele será enviado quando o worker voltar." });
+    expect(db.select().from(pushDeliveries).get()?.status).toBe("queued");
+    expect(network.request).not.toHaveBeenCalled();
+  });
   it("ação enfileira teste sem primeira edição, mas recusa ID zero explícito", async () => {
     const { db, input } = subscribed(); vi.spyOn(databaseModule, "getDatabase").mockReturnValue(db);
     expect(await testPush(input.endpoint, 0)).toMatchObject({ error: true });
@@ -321,6 +388,7 @@ describe("Server Actions protegidas", () => {
     vi.spyOn(databaseModule, "getDatabase").mockImplementation(() => { throw new Error("secret-endpoint-and-key"); });
     const results = await Promise.all([getPushConfiguration(), subscribePush("invalid"), unsubscribePush("invalid"), testPush("invalid", 1)]);
     expect(JSON.stringify(results)).not.toContain("secret-endpoint-and-key");
+    expect(results[0]).toMatchObject({ publicKey: null, subscribed: false, contact: "ausente", workerOnline: false, lastDelivery: null });
     expect(results[1]).toMatchObject({ error: true });
   });
   it("mantém o proxy recusando POST sem sessão e CSRF na página do painel", () => {

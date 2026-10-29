@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, type ReactNode, type AnchorHTMLAttributes } from "react";
 import { useFormStatus } from "react-dom";
-import { ArrowUpRight, RefreshCw, ThumbsUp, ThumbsDown, Bookmark, Check } from "lucide-react";
-import { beginPairing, recordClick, requestCollection, saveFeedback, type ActionResult } from "./actions";
+import { ArrowUpRight, Newspaper, RefreshCw, ThumbsUp, ThumbsDown, Bookmark, Check } from "lucide-react";
+import { beginPairing, recordClick, requestCollection, requestPersonalBriefing, requestGeneralBriefing, saveFeedback, type ActionResult } from "./actions";
 
 export { Navigation } from "./navigation";
 
@@ -18,6 +18,12 @@ export function SubmitButton({ children, className = "button", label }: { childr
 }
 export function CollectButton() {
   return <ActionForm action={requestCollection} className="collect-form"><SubmitButton className="button secondary"><RefreshCw size={16} aria-hidden="true"/>Atualizar fontes</SubmitButton></ActionForm>;
+}
+export function PersonalBriefingButton() {
+  return <ActionForm action={requestPersonalBriefing} className="collect-form"><SubmitButton className="button secondary"><RefreshCw size={16} aria-hidden="true"/>Atualizar briefing pessoal</SubmitButton></ActionForm>;
+}
+export function GeneralBriefingButton() {
+  return <ActionForm action={requestGeneralBriefing} className="collect-form"><SubmitButton className="button secondary"><Newspaper size={16} aria-hidden="true"/>Gerar briefing geral agora</SubmitButton></ActionForm>;
 }
 export function WorkRefresh({ active }: { active: boolean }) {
   const router = useRouter();

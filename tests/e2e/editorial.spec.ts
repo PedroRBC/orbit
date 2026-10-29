@@ -1,7 +1,8 @@
 import { test, expect } from "./fixtures";
 import { resolve } from "node:path";
+import { eq, inArray } from "drizzle-orm";
 import { openDatabase } from "../../src/db/index";
-import { editions, sources } from "../../src/db/schema";
+import { briefings, editions, interestProfile, rawItems, sourceItems, sources, topics } from "../../src/db/schema";
 import { saveRawItems } from "../../src/lib/store";
 
 test("edição geral tem arquivo privado, período, fontes e leitura móvel sem contaminar o pessoal", async ({ page }) => {
@@ -34,7 +35,73 @@ test("edição geral tem arquivo privado, período, fontes e leitura móvel sem 
   await expect(page.locator(".edition-schedule").getByRole("alert")).toContainText("Fuso inválido");
   await page.goto("/temas");
   await expect(page.getByRole("heading", { name: "Temas", exact: true })).toBeVisible();
-  await expect(page.locator(".edition-list > section")).toHaveCount(8);
+  await expect(page.locator('.edition-list > section[data-origin="seed"]')).toHaveCount(8);
   await expect(page.locator(".edition-list").getByRole("link", { name: "Tecnologia", exact: true })).toHaveAttribute("href", "/?tema=tecnologia&periodo=all#recommendations");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("briefing pessoal identifica o complemento RSS e mantém leitura móvel sem repetir a notícia em Fora da bolha", async ({ page }) => {
+  const db = openDatabase(resolve("test-results/e2e.db")), now = Date.now();
+  const previous = db.select().from(interestProfile).where(eq(interestProfile.id, 1)).get();
+  const source = db.insert(sources).values({ channelId: "synthetic-task9-briefing", name: "Fonte pessoal sintética" }).returning().get();
+  const news = db.insert(sources).values({ channelId: "https://task9.example/rss", name: "Portal externo sintético", platform: "news", kind: "news_rss" }).returning().get();
+  db.insert(interestProfile).values({ id: 1, interests: "Ciência sintética", excluded: "", updatedAt: now }).onConflictDoUpdate({ target: interestProfile.id, set: { interests: "Ciência sintética" } }).run();
+  const ids = ["youtube:task9-personal", "news:task9-external"];
+  for (const [sourceId, platform, externalId] of [[source.id, "youtube", "task9-personal"], [news.id, "news", "task9-external"]] as const) saveRawItems(db, sourceId, [{ platform, externalId, evidence: platform === "news" ? "news_rss" : "rss", title: `Manchete sintética ${externalId}`, text: "Trecho somente para teste", author: platform === "news" ? "Portal externo sintético" : "Canal pessoal sintético", url: `https://task9.example/${externalId}`, thumbnail: null, publishedAt: now, newsPublishedAt: platform === "news" ? now : null, durationSeconds: null }]);
+  const briefing = db.insert(briefings).values({ snapshot: `task9-${now}`, introduction: "Este é um recorte sintético do feed com complemento externo atribuído.", createdAt: now, windowFrom: now - 86400000, windowTo: now, model: "fixture", sourceCount: 2, candidateCount: 2 }).returning().get();
+  const topicId = `task9-${now}`;
+  db.insert(topics).values({ id: topicId, briefingId: briefing.id, position: 0, title: "Fato concreto sintético", summary: "Segundo o canal pessoal e o portal externo, o mesmo fato aparece nas duas fontes.", itemIds: JSON.stringify(ids) }).run();
+  try {
+    await page.goto("/");
+    const card = page.getByRole("region", { name: "Seu briefing pessoal", exact: true });
+    await expect(card).toContainText("1 item pessoal · 1 notícia externa");
+    await expect(card).toContainText("Inclui notícias externas de RSS como complemento; elas não vêm do seu algoritmo.");
+    await expect(card.getByText("Inclui fonte externa", { exact: true })).toBeVisible();
+    await expect(card.getByRole("link", { name: /Portal externo sintético/ })).toHaveAttribute("href", "https://task9.example/task9-external");
+    await expect(page.getByRole("region", { name: "Fora da bolha", exact: true })).not.toContainText("Manchete sintética task9-external");
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect(card.getByText("Inclui fonte externa", { exact: true })).toBeVisible();
+    await expect(page.locator("body")).not.toContainText("synthetic-e2e-api-key-never-render");
+  } finally {
+    db.delete(topics).where(eq(topics.id, topicId)).run();
+    db.delete(briefings).where(eq(briefings.id, briefing.id)).run();
+    db.delete(sourceItems).where(inArray(sourceItems.rawId, ids)).run();
+    db.delete(rawItems).where(inArray(rawItems.id, ids)).run();
+    db.delete(sources).where(inArray(sources.id, [source.id, news.id])).run();
+    if (previous) db.update(interestProfile).set(previous).where(eq(interestProfile.id, 1)).run();
+    else db.delete(interestProfile).where(eq(interestProfile.id, 1)).run();
+    db.$client.close();
+  }
+});
+
+test("botões manuais usam ações autenticadas e mantêm erro de configuração legível no celular", async ({ page }) => {
+  const db = openDatabase(resolve("test-results/e2e.db"));
+  const previous = db.select().from(interestProfile).where(eq(interestProfile.id, 1)).get();
+  const source = db.insert(sources).values({ channelId: "synthetic-manual-briefing-e2e", name: "Fonte sintética manual", enabled: true }).returning().get();
+  db.insert(interestProfile).values({ id: 1, interests: "Ciência sintética", excluded: "", updatedAt: Date.now() }).onConflictDoUpdate({ target: interestProfile.id, set: { interests: "Ciência sintética" } }).run();
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    for (const name of ["Atualizar briefing pessoal", "Gerar briefing geral agora"]) {
+      const button = page.getByRole("button", { name, exact: true });
+      await expect(button).toBeVisible();
+      await button.click();
+      const form = button.locator("..");
+      await expect(form.getByRole("alert")).toContainText(/Configure AI_(BRIEFING_MODEL|MODEL|BASE_URL)/);
+      await expect(button).toBeEnabled();
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.goto("/briefings");
+    const general = page.getByRole("button", { name: "Gerar briefing geral agora", exact: true });
+    await general.click();
+    await expect(general.locator("..").getByRole("alert")).toContainText(/Configure AI_(BRIEFING_MODEL|MODEL|BASE_URL)/);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect(page.locator("body")).not.toContainText("synthetic-e2e-api-key-never-render");
+  } finally {
+    db.delete(sources).where(eq(sources.id, source.id)).run();
+    if (previous) db.update(interestProfile).set(previous).where(eq(interestProfile.id, 1)).run();
+    else db.delete(interestProfile).where(eq(interestProfile.id, 1)).run();
+    db.$client.close();
+  }
 });

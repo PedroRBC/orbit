@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { spawn } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { openDatabase } from "../src/db/index";
 import { collectorRuns, interestProfile, sources, rawItems, processedItems } from "../src/db/schema";
-import { acquireLease, claimRun, enqueueCollection, recoverRuns } from "../src/lib/store";
+import { pushDeliveries } from "../src/db/push-schema";
+import { acquireLease, claimRun, enqueueCollection, getSetting, recoverRuns, setSetting } from "../src/lib/store";
 import { CollectorError } from "../src/collectors/errors";
 import { runCollection, runWithConfiguredAI } from "../src/lib/run";
 
@@ -11,6 +16,39 @@ function database() { const db = openDatabase(":memory:"); databases.push(db); r
 afterEach(() => { vi.unstubAllEnvs(); for (const db of databases.splice(0)) db.$client.close(); });
 
 describe("worker", () => {
+  it("erro transitório em drainPush não encerra o worker", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "orbit-push-worker-"));
+    const path = join(directory, "orbit.db"), db = openDatabase(path);
+    setSetting(db, "edition_schedule", JSON.stringify({ enabled: false, timezone: "UTC" }));
+    // Simula falha de armazenamento dentro de drainPush, mantendo lease e heartbeat reais.
+    db.$client.exec("ALTER TABLE push_deliveries RENAME TO synthetic_push_deliveries");
+    const child = spawn(process.execPath, ["--import", "tsx", "src/worker.ts"], {
+      stdio: ["ignore", "ignore", "pipe"],
+      env: { ...process.env, ORBIT_ENV_FILE: "", DOTENV_CONFIG_PATH: join(directory, "unused.env"), ORBIT_DB_PATH: path, SCHEDULER_ENABLED: "false", AI_BASE_URL: "", AI_API_KEY: "", AI_MODEL: "", AI_BRIEFING_MODEL: "", ORBIT_PUSH_SUBJECT: "" },
+    });
+    let errors = "";
+    child.stderr!.on("data", data => { errors += data; });
+    try {
+      await expect.poll(() => errors, { timeout: 5000 }).toContain("Falha ao enviar notificações; nova tentativa no próximo ciclo.");
+      const heartbeat = Number(getSetting(db, "worker_heartbeat"));
+      expect(heartbeat).toBeGreaterThan(0);
+      expect(child.exitCode).toBeNull();
+      expect(errors).not.toContain("no such table");
+      db.$client.exec("ALTER TABLE synthetic_push_deliveries RENAME TO push_deliveries");
+      await expect.poll(() => Number(getSetting(db, "worker_heartbeat")), { timeout: 15000 }).toBeGreaterThan(heartbeat);
+      expect(child.exitCode).toBeNull();
+      expect(db.select().from(pushDeliveries).all()).toEqual([]);
+    } finally {
+      await new Promise<void>(resolve => {
+        if (child.exitCode !== null) { resolve(); return; }
+        const timer = setTimeout(() => child.kill("SIGKILL"), 5000);
+        child.once("exit", () => { clearTimeout(timer); resolve(); });
+        child.once("error", () => { clearTimeout(timer); resolve(); });
+        child.kill("SIGTERM");
+      });
+      db.$client.close(); rmSync(directory, { recursive: true, force: true });
+    }
+  }, 25000);
   it("isola falha de um canal e persiste o seguinte sem IA configurada", async () => {
     const db = database();
     db.insert(sources).values([{ channelId: "first", name: "Primeiro" }, { channelId: "second", name: "Segundo" }]).run();

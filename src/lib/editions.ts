@@ -1,20 +1,22 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { OrbitDB } from "../db/index";
 import { collectorRuns, editions } from "../db/schema";
 import { assertLease, getSetting } from "./store";
+import { environmentSource, readEnvironment } from "./ai-environment";
 
-export type EditionSchedule = { enabled: boolean; timezone: string; needsTimezone: boolean; error: string | null };
-export function readEditionSchedule(db: OrbitDB, env: Record<string, string | undefined> = process.env): EditionSchedule {
+export type EditionSchedule = { enabled: boolean; timezone: string; needsTimezone: boolean; error: string | null; origin: "interface" | "coleta" | "arquivo" | "ambiente" | "padrão" };
+export function readEditionSchedule(db: OrbitDB, env: Record<string, string | undefined> = readEnvironment().env): EditionSchedule {
+  const stored = getSetting(db, "edition_schedule"), collection = getSetting(db, "scheduler_config");
+  const source = environmentSource(env, "COLLECTOR_TIMEZONE");
+  const origin: EditionSchedule["origin"] = stored ? "interface" : collection ? "coleta" : source === "ausente" ? "padrão" : source;
   try {
-    const stored = getSetting(db, "edition_schedule");
-    const collection = getSetting(db, "scheduler_config");
     const inherited = collection ? JSON.parse(collection).timezone : env.COLLECTOR_TIMEZONE;
     const config = stored ? JSON.parse(stored) : { enabled: !!inherited, timezone: inherited || "America/Sao_Paulo" };
     if (typeof config.enabled !== "boolean" || typeof config.timezone !== "string" || config.timezone.length > 100) throw new Error("Agenda inválida");
     new Intl.DateTimeFormat("pt-BR", { timeZone: config.timezone });
-    return { enabled: config.enabled, timezone: config.timezone, needsTimezone: !stored && !inherited, error: null };
+    return { enabled: config.enabled, timezone: config.timezone, needsTimezone: !stored && !inherited, error: null, origin };
   } catch {
-    return { enabled: false, timezone: "America/Sao_Paulo", needsTimezone: true, error: "Confira o fuso da agenda geral. Nenhuma edição automática será gerada até corrigir a configuração." };
+    return { enabled: false, timezone: "America/Sao_Paulo", needsTimezone: true, origin, error: "Confira o fuso da agenda geral. Nenhuma edição automática será gerada até corrigir a configuração." };
   }
 }
 
@@ -47,7 +49,21 @@ export function queueDueEdition(db: OrbitDB, owner: string, now = new Date()): n
   }, { behavior: "immediate" });
 }
 
-export const editionLabel = (edition: string) => edition === "morning" ? "Edição da manhã" : "Edição da tarde";
+export function queueManualEdition(db: OrbitDB, now = new Date()): "queued" | "active" | "recent" | "timezone" {
+  return db.transaction(() => {
+    const schedule = readEditionSchedule(db);
+    if (schedule.needsTimezone || schedule.error) return "timezone";
+    if (db.select().from(collectorRuns).where(sql`${collectorRuns.parentId} IS NULL AND ${collectorRuns.kind} = 'edition' AND ${collectorRuns.status} IN ('queued', 'running')`).get()) return "active";
+    if (db.select().from(collectorRuns).where(sql`${collectorRuns.parentId} IS NULL AND ${collectorRuns.kind} = 'edition' AND ${collectorRuns.trigger} = 'manual' AND ${collectorRuns.startedAt} > ${now.getTime() - 300000}`).get()) return "recent";
+    const time = now.getTime(), timezone = schedule.timezone;
+    const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    const edition = db.insert(editions).values({ edition: "manual", slot: `manual:${timezone}:${time}`, localDate, timezone, scheduledAt: time, windowFrom: time - 86400000, windowTo: time, createdAt: time }).returning().get();
+    db.insert(collectorRuns).values({ kind: "edition", editionId: edition.id, trigger: "manual", status: "queued", startedAt: time }).run();
+    return "queued";
+  }, { behavior: "immediate" });
+}
+
+export const editionLabel = (edition: string) => edition === "manual" ? "Edição sob demanda" : edition === "morning" ? "Edição da manhã" : "Edição da tarde";
 export function editionTime(time: number, timezone: string) {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: timezone, dateStyle: "short", timeStyle: "short" }).format(time);
 }

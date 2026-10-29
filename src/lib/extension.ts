@@ -6,6 +6,7 @@ import { collectorRuns, companionJobs, settings, sources } from "../db/schema";
 import { browserSourceKinds, type BrowserPlatform, type RawItem } from "../collectors/types";
 import { CollectorError } from "../collectors/errors";
 import { getSetting, setSetting } from "./store";
+import { readEnvironment } from "./ai-environment";
 
 const pairingKey = "extension_pairing";
 const connectionKey = "extension_connection";
@@ -90,7 +91,7 @@ export function claimCaptureJob(db: OrbitDB) {
       const platform = (Object.keys(browserSourceKinds) as BrowserPlatform[]).find(platform => browserSourceKinds[platform] === source.kind);
       if (!platform) continue;
       db.update(companionJobs).set({ status: "claimed" }).where(eq(companionJobs.id, job.id)).run();
-      return { id: job.id, platform, expiresAt: job.expiresAt, maxItems: z.coerce.number().int().min(1).max(50).parse(process.env.COLLECTOR_MAX_ITEMS || "20") };
+      return { id: job.id, platform, expiresAt: job.expiresAt, maxItems: z.coerce.number().int().min(1).max(50).parse(readEnvironment().env.COLLECTOR_MAX_ITEMS || "20") };
     }
     return null;
   }, { behavior: "immediate" });
@@ -128,7 +129,7 @@ export function completeCaptureJob(db: OrbitDB, id: string, input: unknown) {
       if (payload.error === "rate_limited") db.update(sources).set({ cooldownUntil: Date.now() + (payload.retryAfterMs || 900000) }).where(eq(sources.id, source.id)).run();
       return;
     }
-    const max = z.coerce.number().int().min(1).max(50).parse(process.env.COLLECTOR_MAX_ITEMS || "20");
+    const max = z.coerce.number().int().min(1).max(50).parse(readEnvironment().env.COLLECTOR_MAX_ITEMS || "20");
     if (payload.items.length > max) throw new ExtensionError("Quantidade acima do limite.");
     if (!Object.hasOwn(browserSourceKinds, source.platform)) throw new ExtensionError("Essa fonte não é coletada pelo navegador.");
     const platform = source.platform as BrowserPlatform;
