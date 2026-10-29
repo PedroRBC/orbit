@@ -127,14 +127,13 @@ for (const leave of [false, true]) {
       }
       const beforeCompletion = actions;
       await page.clock.resume();
-      const completed = page.waitForResponse(response => response.request().headers()["next-action"] !== undefined);
+      const completed = page.waitForResponse(response => response.request().postData()?.includes("p256dh") === true);
       release();
-      await (await completed).finished();
-      await page.waitForLoadState("networkidle");
-      expect(db.select().from(pushSubscriptions).where(eq(pushSubscriptions.id, id)).get()).toMatchObject(subscription.keys);
+      expect((await completed).status()).toBe(200);
+      // Verifique a reconciliação, não o fechamento do stream RSC após consumir a ação.
+      await expect.poll(() => db.select().from(pushSubscriptions).where(eq(pushSubscriptions.id, id)).get()).toMatchObject(subscription.keys);
       if (leave) {
         await page.clock.fastForward(31_000);
-        await page.waitForLoadState("networkidle");
         expect(actions).toBe(beforeCompletion);
         await expect(page).toHaveURL("/");
       } else {
@@ -335,6 +334,8 @@ for (const leave of [false, true]) {
       const afterFiveSeconds = actions;
       if (leave) {
         await page.getByRole("link", { name: "Hoje", exact: true }).click();
+        await expect(page).toHaveURL("/");
+        await expect(panel).toHaveCount(0);
         await page.clock.fastForward(15_000);
         expect(actions).toBe(afterFiveSeconds);
       } else {

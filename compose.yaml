@@ -1,8 +1,8 @@
 # Orbit em um contêiner: interface, worker e migrações. Veja docs/deploy.md.
-# Leitura ampliada de orbit.env exige build desta worktree; a imagem 0.2.2 lê só AI_*.
+# Antes de atualizar para 0.2.3, faça backup verificado do banco (catálogo v2).
 services:
   orbit:
-    image: ${ORBIT_IMAGE:-ghcr.io/pedrorbc/orbit:0.2.2}
+    image: ${ORBIT_IMAGE:-ghcr.io/pedrorbc/orbit:0.2.3}
     build: .
     init: true
     restart: unless-stopped

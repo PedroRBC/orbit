@@ -8,9 +8,9 @@ Não confunda o que seus feeds mostram com uma visão completa do mundo. O Orbit
 
 `AI_BASE_URL` agora aceita HTTP fora de localhost, inclusive IP da LAN e hostname de serviço Docker, sem flag adicional. Isso permite usar o CliProxyApi na rede do NAS. HTTP envia chave e textos sem criptografia: use apenas em rede confiável. Login, RSS e Web Push não mudam. A tag `v0.2.2` publica `0.2.2` e `latest` no GHCR privado, após CI aprovada, sem alterar o NAS ou fazer merge na main.
 
-## Evolução em desenvolvimento — não publicada
+## Versão 0.2.3 — briefings, temas e Push
 
-Sobre a base `0.2.2`, esta worktree acrescenta configuração reconhecida, briefings sob demanda, RSS como complemento do briefing pessoal, temas automáticos e correções de Web Push. **Essas mudanças ainda não estão na imagem `0.2.2`**; versão e imagem padrão permanecem intactas. Não houve publicação nem alteração no NAS nesta etapa. Escopo aprovado: [especificação](docs/superpowers/specs/2026-10-28-briefings-push-themes-design.md) e [plano](docs/superpowers/plans/2026-10-28-briefings-push-themes.md).
+A versão `0.2.3` acrescenta configuração reconhecida, briefings sob demanda, RSS como complemento do briefing pessoal, temas automáticos e correções de Web Push. A tag `v0.2.3` publica `0.2.3` e `latest` após CI aprovada, sem alterar o NAS. Escopo aprovado: [especificação](docs/superpowers/specs/2026-10-28-briefings-push-themes-design.md) e [plano](docs/superpowers/plans/2026-10-28-briefings-push-themes.md).
 
 - [Catálogo de temas e consolidação auditada](docs/taxonomy.md): oito sementes, novos temas após três itens pessoais distintos, até 40 temas e junção pela interface. Faça backup antes da migração v2; voltar à `0.2.2` exige restaurá-lo.
 - [Briefings pessoais e gerais](docs/briefings.md): atualização pessoal sem coletar fontes, edição geral sob demanda e horários 08h/16h, com orçamento diário compartilhado.
@@ -23,7 +23,7 @@ Em **Configurações → Briefings gerais**, confirme o fuso e ative os horário
 O Orbit roda como um serviço em contêiner: interface, worker e migrações juntos, banco SQLite persistente e IA configurada fora da imagem. Pelo endereço HTTPS, ele pode ser instalado no celular como app (PWA). Instalação, volumes, acesso remoto, login, extensão, PWA no Android/iPhone, backup, atualização e diagnóstico estão em [docs/deploy.md](docs/deploy.md).
 
 - [PR de implantação #2](https://github.com/PedroRBC/orbit/pull/2).
-- [Pacote privado no GHCR](https://github.com/users/PedroRBC/packages/container/package/orbit): versão desta entrega `ghcr.io/pedrorbc/orbit:0.2.2`, publicada pela tag após CI aprovada, junto de `:sha-<commit curto>` e `:latest`. `latest` acompanha a main e tags estáveis; candidatos nunca. Este lançamento não faz merge na main.
+- [Pacote privado no GHCR](https://github.com/users/PedroRBC/packages/container/package/orbit): versão desta entrega `ghcr.io/pedrorbc/orbit:0.2.3`, publicada pela tag após CI aprovada, junto de `:sha-<commit curto>` e `:latest`. `latest` acompanha a main e tags estáveis; candidatos nunca. Este lançamento não faz merge na main.
 - [Publicações da main](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml?query=branch%3Amain): cada execução confere privacidade, tags e digest; consulte a última publicação aprovada antes de instalar ou atualizar.
 - [Registro de validação](docs/validation-self-hosted.md): testes executados e pendências no NAS/celular, incluindo a [publicação anterior do candidato](https://github.com/PedroRBC/orbit/actions/runs/40696551059).
 
