@@ -28,7 +28,7 @@ Para Web Push, forneça **`ORBIT_PUSH_SUBJECT`** (contato `mailto:` ou HTTPS pú
 
 | Item | Valor |
 | --- | --- |
-| Imagem | `ghcr.io/pedrorbc/orbit:<versão>` ou `:sha-<commit>` (privada; veja "Imagem no GHCR"). Teste local: `docker compose up -d --build` |
+| Imagem | `ghcr.io/pedrorbc/orbit:<versão>` ou `:sha-<commit>` (veja "Imagem no GHCR"). Teste local: `docker compose up -d --build` |
 | Porta interna | `3000` (HTTP). O Compose publica em `30480` por padrão (`ORBIT_PORT`) |
 | Usuário | `568:568` (usuário `apps` do TrueNAS), sem root, sem capabilities, raiz somente leitura |
 | `/data` | Banco `orbit.db` com `-wal`/`-shm`. Gravável pelo UID do contêiner, modo 700 |
@@ -106,7 +106,7 @@ services:
       - /mnt/Files/Backups/orbit:/backups
 ```
 
-Como a imagem é privada, faça login no GHCR antes em **Apps → Configuration → Sign-in to a Docker registry**:
+Se o pacote estiver público, não é necessário login para baixar a imagem. Se estiver privado, configure o GHCR em **Apps → Configuration → Sign-in to a Docker registry**:
 
 - Tipo **Other Registry**, URI `https://ghcr.io`.
 - Seu usuário do GitHub e um token clássico **somente** com `read:packages`.
@@ -247,7 +247,11 @@ O que foi coletado depois da atualização se perde nessa volta.
 
 ## Imagem no GHCR
 
-O workflow `.github/workflows/ci.yml` roda testes, typecheck, build e e2e em PRs, pushes na `main` e tags `v*`. Um push de branch isolado não dispara CI. A imagem só é publicada (privada, `linux/amd64`) em dois casos:
+O repositório GitHub é público; o pacote GHCR pode ser público ou privado. Visibilidade controla quem pode baixar a imagem, não quem pode publicar versões. O workflow `.github/workflows/ci.yml` roda testes, typecheck, build e e2e em PRs, pushes na `main` e tags `v*`. Um push de branch isolado não dispara CI. PRs, inclusive de forks, só executam validação, sem permissão de publicar.
+
+A publicação exige o repositório oficial `PedroRBC/orbit` (ID `1436259756`), um push da conta `PedroRBC` (ID `58788062`) e a mesma conta como solicitante da execução ou reexecução. Forks, outras contas e bots não publicam a imagem oficial pelo workflow. Os checkouts não persistem credenciais; o token tem `contents: read` e somente o job de imagem recebe `packages: write`. Não há permissão `contents: write` nem criação automática de GitHub Releases.
+
+Com os testes aprovados e a identidade validada, a imagem é publicada (`linux/amd64`) nos seguintes eventos:
 
 | Evento | Tags publicadas |
 | --- | --- |
@@ -257,7 +261,7 @@ O workflow `.github/workflows/ci.yml` roda testes, typecheck, build e e2e em PRs
 
 Use a versão ou o `sha-` no TrueNAS, nunca só `latest`. O `sha-` identifica exatamente o commit; a imagem também traz os labels `org.opencontainers.image.version` e `.revision`.
 
-O YAML deste guia fixa `0.2.3`. O [pacote é privado](https://github.com/users/PedroRBC/packages/container/package/orbit); acessar o link e baixar a imagem exigem autenticação. A CI da tag precisa concluir antes de instalar.
+O YAML deste guia fixa `0.2.3`. Consulte o [pacote no GHCR](https://github.com/users/PedroRBC/packages/container/package/orbit). Se público, o download não exige autenticação; se privado, exige acesso ao pacote. A CI não altera a visibilidade. A CI da tag precisa concluir antes de instalar.
 
 Todo lançamento estável por tag (ex.: `v0.2.1`) publica `ghcr.io/pedrorbc/orbit:<versão>`, `:sha-<commit curto>` e move `latest` para ele; candidatos com `-` (ex.: `-rc.1`) nunca recebem `latest`. Push na main também move `latest`. Para uma atualização controlada no NAS, mantenha a versão fixa ou copie o digest do resumo da [publicação aprovada](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml):
 
@@ -267,7 +271,18 @@ ghcr.io/pedrorbc/orbit@sha256:<digest publicado>
 
 O digest anterior do candidato `0.2.0-rc.2` não identifica a versão oficial. O [registro de validação](validation-self-hosted.md) preserva essa evidência histórica e distingue testes executados de verificações pendentes no NAS/celular.
 
-O CI verifica que o repositório e um pacote já existente são privados **antes** de publicar. Depois, consulta a API de pacotes para exigir `visibility: private` e confere que as tags de versão e SHA apontam para o digest publicado. A evidência aparece no resumo da [execução de publicação](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml). Se a consulta falhar, a execução falha em vez de declarar publicação verificada.
+O CI confirma o ID do repositório oficial antes de publicar e aceita pacote público ou privado. Depois, confere tags e digest pela API e pelo registry e apenas informa a visibilidade encontrada, sem exigir `private`. A evidência aparece no resumo da [execução de publicação](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml). Se a consulta falhar, a execução falha em vez de declarar publicação verificada.
+
+### Controle de releases no GitHub
+
+Em 30/10/2026 foram ativados dois rulesets no repositório oficial:
+
+- [Orbit: owner-only main](https://github.com/PedroRBC/orbit/rules/26207761): somente administradores podem criar, atualizar ou excluir `main`.
+- [Orbit: owner-only tags](https://github.com/PedroRBC/orbit/rules/26207762): somente administradores podem criar, atualizar ou excluir qualquer tag.
+
+Somente `PedroRBC` tem acesso de escrita/administração no momento da configuração. Os rulesets usam bypass para o papel **Admin**, não uma lista individual; conceder administração a outra conta também concede esse bypass. As regras são configurações do GitHub, não acompanham forks e precisam ser recriadas se o repositório for migrado.
+
+Para manter releases exclusivas, não conceda **Write**, **Maintain** ou **Admin** a outras contas, apps ou chaves. Permissão de escrita pode criar/editar uma GitHub Release para uma tag existente ou introduzir outro workflow de publicação; a condição deste workflow não é uma ACL global. Contribuições externas devem chegar por fork/PR, revisadas e integradas por `PedroRBC`. A conta proprietária e seus tokens continuam sendo a fronteira de confiança.
 
 ## Teste local (sem NAS)
 

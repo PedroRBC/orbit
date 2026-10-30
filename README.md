@@ -25,8 +25,8 @@ Em **Configurações → Briefings gerais**, confirme o fuso e ative os horário
 O Orbit roda como um serviço em contêiner: interface, worker e migrações juntos, banco SQLite persistente e IA configurada fora da imagem. Pelo endereço HTTPS, ele pode ser instalado no celular como app (PWA). Instalação, volumes, acesso remoto, login, extensão, PWA no Android/iPhone, backup, atualização e diagnóstico estão em [docs/deploy.md](docs/deploy.md).
 
 - [PR de implantação #2](https://github.com/PedroRBC/orbit/pull/2).
-- [Pacote privado no GHCR](https://github.com/users/PedroRBC/packages/container/package/orbit): versão desta entrega `ghcr.io/pedrorbc/orbit:0.2.3`, publicada pela tag após CI aprovada, junto de `:sha-<commit curto>` e `:latest`. `latest` acompanha a main e tags estáveis; candidatos nunca. Este lançamento não faz merge na main.
-- [Publicações da main](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml?query=branch%3Amain): cada execução confere privacidade, tags e digest; consulte a última publicação aprovada antes de instalar ou atualizar.
+- [Pacote no GHCR](https://github.com/users/PedroRBC/packages/container/package/orbit): versão desta entrega `ghcr.io/pedrorbc/orbit:0.2.3`, publicada pela tag após CI aprovada, junto de `:sha-<commit curto>` e `:latest`. `latest` acompanha a main e tags estáveis; candidatos nunca. Este lançamento não faz merge na main.
+- [Publicações da main](https://github.com/PedroRBC/orbit/actions/workflows/ci.yml?query=branch%3Amain): cada execução confere tags e digest e informa a visibilidade do pacote, sem exigir pacote privado; consulte a última publicação aprovada antes de instalar ou atualizar.
 - [Registro de validação](docs/validation-self-hosted.md): testes executados e pendências no NAS/celular, incluindo a [publicação anterior do candidato](https://github.com/PedroRBC/orbit/actions/runs/40696551059).
 
 ## Rodar
