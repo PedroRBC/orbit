@@ -1,5 +1,7 @@
 # Orbit
 
+O Orbit reúne conteúdos do YouTube, X, Instagram, Valete+ e feeds RSS em um painel pessoal, com IA para filtrar, resumir e recomendar o que vale a pena acompanhar. Desenvolvido com TypeScript, Next.js, React e Tailwind CSS, usa SQLite com Drizzle ORM e um worker Node.js para coletas agendadas. Roda em servidor próprio via Docker e pode ser instalado no celular como PWA.
+
 Curador pessoal de conteúdo, local e em português. **Cinco fases implementadas:** YouTube RSS/home, X Para você, Instagram, Valete+, recomendações de IA, briefing com fontes, feedback, perfil aprendido, Fora da bolha por RSS externo, agenda e controle de custo.
 
 Não confunda o que seus feeds mostram com uma visão completa do mundo. O Orbit indica fontes e limites da análise.
